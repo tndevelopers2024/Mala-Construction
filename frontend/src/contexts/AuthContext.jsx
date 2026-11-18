@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import ConfirmDialog from '../components/modals/ConfirmDialog';
 import { authService } from '../services/authService';
 import { settingsService } from '../services/settingsService';
+import { setTokens, clearTokens } from '../services/tokenStorage';
 import { useTheme } from './ThemeContext';
 import { useToast } from './ToastContext';
 
@@ -29,6 +30,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     setIsLoading(false);
     queryClient.clear();
+    clearTokens();
 
     if (typeof window !== 'undefined') {
       document.cookie = 'accessToken=; Max-Age=0; path=/';
@@ -92,8 +94,17 @@ export function AuthProvider({ children }) {
   }, [clearClientSession, toast]);
 
   const login = useCallback(async (credentials) => {
-    const { data } = await authService.login(credentials);
-    setUser(data);
+    const res = await authService.login(credentials);
+    const userData = res.data;
+
+    if (res.accessToken) {
+      setTokens({
+        accessToken: res.accessToken,
+        refreshToken: res.refreshToken,
+      });
+    }
+
+    setUser(userData);
 
     // Load and apply theme settings from database after login
     try {
@@ -111,7 +122,7 @@ export function AuthProvider({ children }) {
       console.warn('Could not load user settings after login:', settingsErr);
     }
 
-    return data;
+    return userData;
   }, [setTheme]);
 
   const requestLogout = useCallback(() => {

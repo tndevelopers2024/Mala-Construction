@@ -174,14 +174,25 @@ async function refresh({ refreshToken, userAgent }) {
 }
 
 async function logout({ refreshToken, user, req }) {
-  if (!refreshToken || !user) return; // nothing to invalidate - treat as an already-logged-out no-op
+  if (!refreshToken && !user) return;
 
-  const tokenHash = hashToken(refreshToken);
-  user.refreshTokens = user.refreshTokens.filter((t) => t.tokenHash !== tokenHash);
-  await user.save();
-  await UserSession.deleteOne({ tokenHash });
+  if (refreshToken) {
+    const tokenHash = hashToken(refreshToken);
+    if (user) {
+      user.refreshTokens = user.refreshTokens.filter((t) => t.tokenHash !== tokenHash);
+      await user.save();
+    } else {
+      await User.updateOne(
+        { 'refreshTokens.tokenHash': tokenHash },
+        { $pull: { refreshTokens: { tokenHash } } }
+      );
+    }
+    await UserSession.deleteOne({ tokenHash });
+  }
 
-  await recordActivity({ actor: user, action: 'logout', entityType: 'User', entityId: user._id, req });
+  if (user) {
+    await recordActivity({ actor: user, action: 'logout', entityType: 'User', entityId: user._id, req });
+  }
 }
 
 async function logoutAllDevices({ user, req }) {

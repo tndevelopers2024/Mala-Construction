@@ -25,8 +25,11 @@ module.exports = {
   },
 
   cookie: {
-    secure: process.env.COOKIE_SECURE === 'true',
-    domain: process.env.COOKIE_DOMAIN || undefined,
+    secure: process.env.COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production',
+    domain:
+      process.env.COOKIE_DOMAIN && process.env.COOKIE_DOMAIN !== 'undefined'
+        ? process.env.COOKIE_DOMAIN
+        : undefined,
   },
 
   rateLimit: {

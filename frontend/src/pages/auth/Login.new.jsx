@@ -26,7 +26,7 @@ const ROLE_OPTIONS = [
 ];
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, isAuthenticated, isLoading } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -37,6 +37,13 @@ export default function Login() {
   const [sites, setSites] = useState([]);
   const [isLoadingSites, setIsLoadingSites] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      const redirectTo = location.state?.from?.pathname || '/dashboard';
+      navigate(redirectTo, { replace: true });
+    }
+  }, [isLoading, isAuthenticated, navigate, location.state]);
 
   const loginForm = useForm({ defaultValues: { email: '', password: '', rememberMe: false } });
   const registerForm = useForm({

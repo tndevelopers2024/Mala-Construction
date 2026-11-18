@@ -38,4 +38,32 @@ const authenticate = asyncHandler(async (req, res, next) => {
   next();
 });
 
+/**
+ * Optional authentication: attaches req.user if a valid token is present,
+ * but allows the request to continue without failing if no token or an expired token is provided.
+ * Useful for endpoints like /logout.
+ */
+const optionalAuthenticate = asyncHandler(async (req, res, next) => {
+  const tokenFromCookie = req.cookies?.accessToken;
+  const authHeader = req.headers.authorization;
+  const tokenFromHeader = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  const token = tokenFromCookie || tokenFromHeader;
+
+  if (!token) return next();
+
+  try {
+    const payload = jwt.verify(token, env.jwt.accessSecret);
+    const user = await User.findById(payload.sub).select('-password');
+    if (user && user.status === 'active') {
+      req.user = user;
+    }
+  } catch {
+    // Ignore invalid/expired tokens in optional authentication
+  }
+
+  next();
+});
+
 module.exports = authenticate;
+module.exports.authenticate = authenticate;
+module.exports.optionalAuthenticate = optionalAuthenticate;
