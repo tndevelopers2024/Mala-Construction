@@ -55,14 +55,29 @@ apiClient.interceptors.response.use(
     const status = error.response?.status;
     const url = originalRequest?.url || '';
 
-    // Only skip refresh for login, register, and refresh itself to prevent infinite retry loops.
-    // /auth/me and operational routes MUST trigger auto-refresh on 401.
+    // Handle 429 Too Many Requests:
+    // Never trigger a session refresh or logout on rate limit; preserve existing session
+    if (status === 429) {
+      error.isRateLimited = true;
+      return Promise.reject(error);
+    }
+
+    // Only skip refresh for login, register, and refresh itself to prevent infinite retry loops
     const isRefreshOrAuthEntry =
       url.includes('/auth/login') ||
       url.includes('/auth/register') ||
       url.includes('/auth/refresh');
 
     if (status === 401 && !originalRequest._retry && !isRefreshOrAuthEntry) {
+      const storedRefreshToken = getRefreshToken();
+      const hasStoredToken = Boolean(getAccessToken() || storedRefreshToken);
+
+      // If this was an initial /auth/me check and there are no stored tokens at all,
+      // the user is simply an unauthenticated visitor. Do not spam /auth/refresh.
+      if (url.includes('/auth/me') && !hasStoredToken) {
+        return Promise.reject(error);
+      }
+
       if (isRefreshing) {
         // Wait for the in-flight refresh, then retry this request.
         return new Promise((resolve, reject) => {
@@ -74,7 +89,6 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const storedRefreshToken = getRefreshToken();
         const refreshPayload = storedRefreshToken ? { refreshToken: storedRefreshToken } : {};
         const refreshHeaders = storedRefreshToken ? { 'x-refresh-token': storedRefreshToken } : {};
 
@@ -96,9 +110,15 @@ apiClient.interceptors.response.use(
         resolveQueue(null, newAccessToken);
         return apiClient(originalRequest);
       } catch (refreshError) {
+        // If refresh failed due to 429 (rate limit), don't kill the session or wipe tokens!
+        if (refreshError.response?.status === 429) {
+          resolveQueue(refreshError);
+          return Promise.reject(refreshError);
+        }
+
         clearTokens();
         resolveQueue(refreshError);
-        // Refresh failed - session is truly over. Let auth context handle clean redirect.
+        // Refresh failed (401/403) - session is genuinely over.
         window.dispatchEvent(new CustomEvent('auth:session-expired'));
         return Promise.reject(refreshError);
       } finally {

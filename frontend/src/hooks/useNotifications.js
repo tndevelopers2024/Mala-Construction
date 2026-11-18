@@ -13,7 +13,9 @@ export function useUnreadNotificationsCount() {
   return useQuery({
     queryKey: ['notifications', 'unread-count'],
     queryFn: () => notificationService.list({ limit: 1 }),
-    refetchInterval: 10000 // Poll every 10 seconds for real-time badge updates
+    staleTime: 30000,
+    refetchInterval: 60000, // Poll every 60 seconds
+    refetchIntervalInBackground: false, // Pause background polling
   });
 }
 

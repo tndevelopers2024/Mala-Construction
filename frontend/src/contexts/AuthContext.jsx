@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import ConfirmDialog from '../components/modals/ConfirmDialog';
 import { authService } from '../services/authService';
@@ -14,6 +14,7 @@ export function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const isInitialLoadDoneRef = useRef(false);
   const { setTheme } = useTheme();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -43,7 +44,7 @@ export function AuthProvider({ children }) {
     clearClientSession();
     setIsLogoutConfirmOpen(false);
     setIsLoggingOut(false);
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
       window.location.replace('/login');
     }
   }, [clearClientSession]);
@@ -68,7 +69,12 @@ export function AuthProvider({ children }) {
       } catch (settingsErr) {
         console.warn('Could not load user settings on startup:', settingsErr);
       }
-    } catch {
+    } catch (err) {
+      // 429 Too Many Requests: rate limit exceeded. Do NOT log out or wipe tokens.
+      if (err?.response?.status === 429 || err?.isRateLimited) {
+        console.warn('Rate limit encountered on /auth/me; preserving session state.');
+        return;
+      }
       clearClientSession();
     } finally {
       setIsLoading(false);
@@ -76,7 +82,10 @@ export function AuthProvider({ children }) {
   }, [clearClientSession, setTheme]);
 
   useEffect(() => {
-    loadCurrentUser();
+    if (!isInitialLoadDoneRef.current) {
+      isInitialLoadDoneRef.current = true;
+      loadCurrentUser();
+    }
   }, [loadCurrentUser]);
 
   // apiClient dispatches this when a refresh attempt fails - session is truly over.
@@ -85,7 +94,8 @@ export function AuthProvider({ children }) {
       setIsLogoutConfirmOpen(false);
       clearClientSession();
       toast.error('Your session expired. Please sign in again.');
-      if (typeof window !== 'undefined') {
+      // Avoid reloading /login if already there to prevent infinite reload loops
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
         window.location.replace('/login');
       }
     };
