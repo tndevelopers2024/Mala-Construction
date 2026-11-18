@@ -2,6 +2,7 @@ const Worker = require('../models/Worker');
 const { addSoftDeleteFilter, createSoftDeletePayload, createRestorePayload } = require('../utils/softDeleteHelpers');
 
 const populateFields = [
+  { path: 'sites', select: 'name code' },
   { path: 'site', select: 'name code' },
   { path: 'profession', select: 'name' },
   { path: 'createdBy', select: 'name' },

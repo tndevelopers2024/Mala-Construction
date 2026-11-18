@@ -63,7 +63,11 @@ export default function WorkerProfile() {
             <h1>{worker.name}</h1>
             <p className="worker-profile__profession">
               <Award size={16} style={{ color: 'var(--color-primary-500)', flexShrink: 0 }} />
-              <span>{worker.profession?.name || 'Laborer'} · {worker.site?.name || 'Unassigned Site'}</span>
+              <span>
+                {worker.profession?.name || 'Laborer'}
+                {' · '}
+                {(worker.sites?.length ? worker.sites : [worker.site]).filter(Boolean).map((s) => s?.name).join(', ') || 'Unassigned Site'}
+              </span>
             </p>
           </div>
         </div>

@@ -248,9 +248,25 @@ export default function Workers() {
                         <span>{w.phone || w.emergencyContact?.phone}</span>
                       </div>
                     )}
-                    <div className="site-card__info-row">
-                      <MapPin size={15} className="site-card__icon" />
-                      <span>{w.site?.name ?? 'Assigned Site'}</span>
+                    <div className="site-card__info-row" style={{ flexWrap: 'wrap' }}>
+                      <MapPin size={15} className="site-card__icon" style={{ flexShrink: 0 }} />
+                      {(w.sites?.length ? w.sites : [w.site]).filter(Boolean).map((s) => (
+                        <span
+                          key={s?._id ?? s}
+                          style={{
+                            display: 'inline-block',
+                            fontSize: 'var(--font-size-xs)',
+                            fontWeight: 600,
+                            background: 'var(--color-primary-50)',
+                            color: 'var(--color-primary-700)',
+                            border: '1px solid var(--color-primary-200)',
+                            borderRadius: 'var(--radius-full, 999px)',
+                            padding: '1px 8px',
+                          }}
+                        >
+                          {s?.name ?? 'Assigned Site'}
+                        </span>
+                      ))}
                     </div>
                   </div>
 

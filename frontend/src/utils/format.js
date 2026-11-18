@@ -48,7 +48,15 @@ export function calculateNetSalary({ workingDays, dailyWage, overtimeAmount = 0,
 export function buildFormData(fields, fileField, file) {
   const formData = new FormData();
   Object.entries(fields).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') formData.append(key, value);
+    if (value === undefined || value === null || value === '') return;
+    // Arrays (e.g. sites[]): append each element so Express parses them correctly
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (item !== undefined && item !== null && item !== '') formData.append(key, item);
+      });
+    } else {
+      formData.append(key, value);
+    }
   });
   if (file) formData.append(fileField, file);
   return formData;

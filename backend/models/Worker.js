@@ -2,10 +2,20 @@ const mongoose = require('mongoose');
 
 const workerSchema = new mongoose.Schema(
   {
-    site: { type: mongoose.Schema.Types.ObjectId, ref: 'Site', required: true, index: true },
+    /**
+     * Array of sites this worker leader is assigned to.
+     * Replaces the old single `site` field to allow multi-site assignment.
+     */
+    sites: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Site', index: true }],
+    /**
+     * Legacy single-site field kept for backward compatibility with existing
+     * attendance, payment, and audit-log records that reference `worker.site`.
+     * Always points to the first entry in `sites`.
+     */
+    site: { type: mongoose.Schema.Types.ObjectId, ref: 'Site', index: true },
     /**
      * Human-readable site-prefixed Worker ID, e.g. "MCH-0001".
-     * Auto-generated in workerService.createWorker using the site's code.
+     * Auto-generated in workerService.createWorker using the primary (first) site's code.
      * Unique per site; sparse so existing records without it are unaffected.
      */
     workerId: { type: String, trim: true, index: true },
@@ -33,9 +43,21 @@ const workerSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+workerSchema.index({ sites: 1, status: 1 });
 workerSchema.index({ site: 1, status: 1 });
 workerSchema.index({ name: 'text', phone: 'text' });
-// Unique workerId per site; sparse so legacy records without workerId are not rejected
+// Unique workerId per primary site; sparse so legacy records without workerId are not rejected
 workerSchema.index({ site: 1, workerId: 1 }, { unique: true, sparse: true });
+
+/**
+ * Pre-save hook: keep `site` in sync as the first element of `sites`.
+ * This ensures backward compat for queries and references using `site`.
+ */
+workerSchema.pre('save', function syncPrimarySite(next) {
+  if (this.sites && this.sites.length > 0) {
+    this.site = this.sites[0];
+  }
+  next();
+});
 
 module.exports = mongoose.model('Worker', workerSchema);

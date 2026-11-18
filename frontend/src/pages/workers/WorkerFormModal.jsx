@@ -16,7 +16,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { toInputDate } from '../../utils/format';
 
 const DEFAULTS = {
-  site: '', name: '', phone: '', profession: '', dailyWage: '', workerCount: 1, joiningDate: toInputDate(new Date()),
+  sites: [], name: '', phone: '', profession: '', dailyWage: '', workerCount: 1, joiningDate: toInputDate(new Date()),
   address: '', emergencyContactName: '', emergencyContactPhone: '', status: 'active',
 };
 
@@ -34,20 +34,39 @@ export default function WorkerFormModal({ isOpen, onClose, worker, defaultSiteId
   useEffect(() => {
     if (isOpen) {
       setPhotoFile(null);
-      reset(worker ? {
-        site: worker.site?._id ?? worker.site,
-        name: worker.name, phone: worker.phone ?? '',
-        profession: worker.profession?._id ?? worker.profession,
-        dailyWage: worker.dailyWage,
-        workerCount: worker.workerCount ?? 1,
-        joiningDate: toInputDate(worker.joiningDate),
-        address: worker.address ?? '',
-        emergencyContactName: worker.emergencyContact?.name ?? '',
-        emergencyContactPhone: worker.emergencyContact?.phone ?? '',
-        status: worker.status ?? 'active',
-      } : { ...DEFAULTS, site: defaultSiteId ?? '' });
+      if (worker) {
+        // Normalize existing worker sites for editing
+        const workerSites = worker.sites?.length
+          ? worker.sites.map((s) => s?._id ?? s)
+          : [worker.site?._id ?? worker.site].filter(Boolean);
+        reset({
+          sites: workerSites,
+          name: worker.name, phone: worker.phone ?? '',
+          profession: worker.profession?._id ?? worker.profession,
+          dailyWage: worker.dailyWage,
+          workerCount: worker.workerCount ?? 1,
+          joiningDate: toInputDate(worker.joiningDate),
+          address: worker.address ?? '',
+          emergencyContactName: worker.emergencyContact?.name ?? '',
+          emergencyContactPhone: worker.emergencyContact?.phone ?? '',
+          status: worker.status ?? 'active',
+        });
+      } else {
+        reset({ ...DEFAULTS, sites: defaultSiteId ? [defaultSiteId] : [] });
+      }
     }
   }, [isOpen, worker, defaultSiteId, reset]);
+
+  const selectedSites = watch('sites') || [];
+
+  const toggleSite = (siteId) => {
+    const current = selectedSites;
+    if (current.includes(siteId)) {
+      setValue('sites', current.filter((id) => id !== siteId), { shouldValidate: true });
+    } else {
+      setValue('sites', [...current, siteId], { shouldValidate: true });
+    }
+  };
 
   const onSubmit = async (values) => {
     try {
@@ -86,15 +105,138 @@ export default function WorkerFormModal({ isOpen, onClose, worker, defaultSiteId
               <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)', marginLeft: 'auto' }}>Auto-generated · Read only</span>
             </div>
           )}
-          {isSuperAdmin && (
-            <FormField label="Site" required error={errors.site?.message} className="form-field--full">
-              <select className="form-select" {...register('site', { required: true })} disabled={isEdit}>
-                <option value="">Select site</option>
-                {activeSites.data?.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-              </select>
+          {isSuperAdmin ? (
+            <FormField
+              label="Sites"
+              required
+              error={errors.sites?.message}
+              className="form-field--full"
+            >
+              <Controller
+                control={control}
+                name="sites"
+                rules={{ validate: (v) => (v && v.length > 0) || 'At least one site is required' }}
+                render={() => {
+                  const allSiteIds = activeSites.data?.map((s) => s._id) || [];
+                  const allSelected = allSiteIds.length > 0 && allSiteIds.every((id) => selectedSites.includes(id));
+                  const someSelected = allSiteIds.some((id) => selectedSites.includes(id));
+                  return (
+                  <div style={{
+                    display: 'flex', flexDirection: 'column', gap: 0,
+                    border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                    maxHeight: 210, overflowY: 'auto',
+                    background: 'var(--color-bg-primary)',
+                  }}>
+                    {allSiteIds.length === 0 && (
+                      <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-tertiary)', padding: '8px 10px' }}>No sites available</span>
+                    )}
+                    {allSiteIds.length > 1 && (
+                      <label
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '8px 10px', cursor: 'pointer',
+                          borderBottom: '1px solid var(--color-border)',
+                          background: allSelected ? 'var(--color-primary-50)' : 'transparent',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                          onChange={() => {
+                            setValue('sites', allSelected ? [] : [...allSiteIds], { shouldValidate: true });
+                          }}
+                          style={{ accentColor: 'var(--color-primary-600)', width: 16, height: 16, flexShrink: 0 }}
+                        />
+                        <span style={{
+                          fontSize: 'var(--font-size-sm)', fontWeight: 600,
+                          color: 'var(--color-text-primary)',
+                        }}>
+                          Select All
+                        </span>
+                        <span style={{
+                          fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)',
+                          marginLeft: 'auto',
+                        }}>
+                          {selectedSites.length}/{allSiteIds.length}
+                        </span>
+                      </label>
+                    )}
+                    {activeSites.data?.map((s) => {
+                      const checked = selectedSites.includes(s._id);
+                      return (
+                        <label
+                          key={s._id}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '6px 8px', borderRadius: 'var(--radius-sm)',
+                            cursor: 'pointer', transition: 'background 0.15s',
+                            background: checked ? 'var(--color-primary-50)' : 'transparent',
+                            border: checked ? '1px solid var(--color-primary-200)' : '1px solid transparent',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleSite(s._id)}
+                            style={{ accentColor: 'var(--color-primary-600)', width: 16, height: 16, flexShrink: 0 }}
+                          />
+                          <span style={{
+                            fontSize: 'var(--font-size-sm)', fontWeight: checked ? 600 : 400,
+                            color: checked ? 'var(--color-primary-700)' : 'var(--color-text-primary)',
+                          }}>
+                            {s.name}
+                          </span>
+                          <span style={{
+                            fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)',
+                            marginLeft: 'auto', fontFamily: 'monospace',
+                          }}>
+                            {s.code}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  );
+                }}
+              />
+              {selectedSites.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                  {selectedSites.map((siteId) => {
+                    const site = activeSites.data?.find((s) => s._id === siteId);
+                    return site ? (
+                      <span
+                        key={siteId}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          fontSize: 'var(--font-size-xs)', fontWeight: 600,
+                          background: 'var(--color-primary-100)', color: 'var(--color-primary-700)',
+                          borderRadius: 'var(--radius-full, 999px)', padding: '2px 10px',
+                        }}
+                      >
+                        {site.name}
+                        <button
+                          type="button"
+                          onClick={() => toggleSite(siteId)}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            padding: 0, lineHeight: 1, fontSize: 14,
+                            color: 'var(--color-primary-500)',
+                          }}
+                          aria-label={`Remove ${site.name}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ) : null;
+                  })}
+                </div>
+              )}
             </FormField>
+          ) : (
+            /* Site admins: auto-assign their own site */
+            <input type="hidden" value={defaultSiteId ?? ''} {...register('sites')} />
           )}
-          {!isSuperAdmin && <input type="hidden" {...register('site')} value={defaultSiteId ?? ''} />}
           <FormField label="Worker Leader Name" required error={errors.name?.message}>
             <input className="form-input" placeholder="e.g. Mark" {...register('name', { required: 'Name is required', setValueAs: v => (typeof v === 'string' ? v.trim() : v) })} />
           </FormField>

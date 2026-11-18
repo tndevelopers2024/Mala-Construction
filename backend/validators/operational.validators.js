@@ -42,7 +42,12 @@ const listMaterialsQuerySchema = z.object({
 });
 
 const createWorkerSchema = z.object({
-  site: objectId,
+  sites: z.union([
+    objectId.transform((id) => [id]),           // single id string → array (backward compat + FormData)
+    z.array(objectId).min(1, 'At least one site is required'),
+  ]).optional(),
+  // Legacy field: also accept `site` and normalize to `sites`
+  site: objectId.optional(),
   name: z.string().trim().min(1).max(150),
   phone: z.preprocess(
     (val) => (val === '' || val === null ? undefined : val),
@@ -59,9 +64,39 @@ const createWorkerSchema = z.object({
     z.string().trim().optional()
   ),
   status: z.enum(['active', 'inactive']).optional().default('active'),
+}).transform((data) => {
+  // Normalize: if `sites` is missing but `site` is present, use it
+  if ((!data.sites || data.sites.length === 0) && data.site) {
+    data.sites = [data.site];
+  }
+  if (!data.sites || data.sites.length === 0) {
+    throw new Error('At least one site is required');
+  }
+  return data;
 });
 
-const updateWorkerSchema = createWorkerSchema.partial().omit({ site: true });
+const updateWorkerSchema = z.object({
+  sites: z.union([
+    objectId.transform((id) => [id]),
+    z.array(objectId).min(1, 'At least one site is required'),
+  ]).optional(),
+  name: z.string().trim().min(1).max(150).optional(),
+  phone: z.preprocess(
+    (val) => (val === '' || val === null ? undefined : val),
+    z.string().trim().optional()
+  ),
+  profession: objectId.optional(),
+  dailyWage: z.coerce.number().min(0).optional(),
+  workerCount: z.coerce.number().int().min(0).optional(),
+  joiningDate: z.coerce.date().optional(),
+  address: z.string().trim().max(500).optional(),
+  emergencyContactName: z.string().trim().max(100).optional(),
+  emergencyContactPhone: z.preprocess(
+    (val) => (val === '' || val === null ? undefined : val),
+    z.string().trim().optional()
+  ),
+  status: z.enum(['active', 'inactive']).optional(),
+});
 
 const listWorkersQuerySchema = z.object({
   ...paginationQuery,

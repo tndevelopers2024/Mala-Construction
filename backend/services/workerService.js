@@ -33,19 +33,29 @@ async function generateWorkerId(siteId) {
 }
 
 async function createWorker(data, actor, file, req) {
-  const targetSite = data.site || (actor.role === 'site_admin' ? actor.assignedSite : null);
-  if (!targetSite) throw ApiError.badRequest('Project site is required');
-  assertSiteAccess(actor, targetSite);
+  // Normalize: accept `sites` array or legacy `site` field
+  let targetSites = data.sites || (data.site ? [data.site] : []);
+  if (!Array.isArray(targetSites)) targetSites = [targetSites];
+  if (targetSites.length === 0 && actor.role === 'site_admin') {
+    targetSites = [actor.assignedSite?.toString()];
+  }
+  if (targetSites.length === 0) throw ApiError.badRequest('At least one project site is required');
+
+  // Verify access to every selected site
+  targetSites.forEach((siteId) => assertSiteAccess(actor, siteId));
 
   let photo = null;
   if (file) {
     photo = await uploadBuffer(file.buffer, 'mala-erp/workers/photos');
   }
 
-  const workerId = await generateWorkerId(targetSite);
+  // Use the primary (first) site for the Worker ID prefix
+  const primarySite = targetSites[0];
+  const workerId = await generateWorkerId(primarySite);
 
   const worker = await workerRepository.create({
-    site: targetSite,
+    sites: targetSites,
+    site: primarySite,
     workerId,
     name: data.name,
     phone: data.phone || '',
@@ -64,7 +74,7 @@ async function createWorker(data, actor, file, req) {
   });
 
   await recordActivity({
-    actor, action: 'create', entityType: 'Worker', entityId: worker._id, site: targetSite, after: worker.toObject(), req,
+    actor, action: 'create', entityType: 'Worker', entityId: worker._id, site: primarySite, after: worker.toObject(), req,
   });
 
   return workerRepository.findById(worker._id);
@@ -74,8 +84,11 @@ async function listWorkers(queryParams, actor) {
   const { page, limit, search, profession, status, sortBy, sortOrder, siteId, showDeleted } = queryParams;
   const siteFilter = resolveSiteScope(actor, siteId);
 
+  // Workers now have a `sites` array — translate { site: X } to match either field
+  const sitesQuery = siteFilter.site ? { $or: [{ sites: siteFilter.site }, { site: siteFilter.site }] } : {};
+
   const query = {
-    ...siteFilter,
+    ...sitesQuery,
     ...(profession && { profession }),
     ...(status && { status }),
     ...buildTextSearchFilter(search, ['name', 'phone']),
@@ -105,17 +118,21 @@ async function searchWorkers(queryParams, actor) {
       }
     : {};
 
+  // Match workers assigned to the site in either `sites` array or legacy `site` field
+  const sitesQuery = siteFilter.site ? { $or: [{ sites: siteFilter.site }, { site: siteFilter.site }] } : {};
+
   return Worker.find({
-    ...siteFilter,
+    ...sitesQuery,
     ...searchFilter,
     status: 'active',
     isDeleted: false,
   })
     .populate([
       { path: 'profession', select: 'name' },
+      { path: 'sites', select: 'name code' },
       { path: 'site', select: 'name code' },
     ])
-    .select('workerId name phone profession dailyWage site status')
+    .select('workerId name phone profession dailyWage sites site status')
     .limit(Number(limit))
     .sort({ name: 1 });
 }
@@ -123,7 +140,13 @@ async function searchWorkers(queryParams, actor) {
 async function getWorkerById(id, actor) {
   const worker = await workerRepository.findById(id);
   if (!worker) throw ApiError.notFound('Worker not found');
-  assertSiteAccess(actor, worker.site._id ?? worker.site);
+  // Check access against any of the worker's assigned sites
+  const workerSites = worker.sites?.length ? worker.sites : [worker.site];
+  const siteToCheck = workerSites.find((s) => {
+    const sid = s?._id ?? s;
+    return sid?.toString() === actor.assignedSite?.toString();
+  }) || workerSites[0];
+  assertSiteAccess(actor, siteToCheck?._id ?? siteToCheck);
   return worker;
 }
 
@@ -153,6 +176,14 @@ async function updateWorker(id, data, actor, file, req) {
   const before = await getWorkerById(id, actor);
   const update = { ...data };
 
+  // Handle sites update: keep `site` in sync as primary
+  if (update.sites && Array.isArray(update.sites) && update.sites.length > 0) {
+    update.sites.forEach((siteId) => assertSiteAccess(actor, siteId));
+    update.site = update.sites[0];
+  }
+  // Remove legacy single-site field from update payload
+  delete update.site_legacy;
+
   if (data.emergencyContactName !== undefined || data.emergencyContactPhone !== undefined) {
     update.emergencyContact = {
       name: data.emergencyContactName ?? before.emergencyContact?.name,
@@ -168,9 +199,10 @@ async function updateWorker(id, data, actor, file, req) {
   }
 
   const updated = await workerRepository.updateById(id, update);
+  const primarySite = updated.sites?.[0]?._id ?? updated.site?._id ?? updated.site;
   await recordActivity({
     actor, action: 'update', entityType: 'Worker', entityId: id,
-    site: before.site._id ?? before.site, before: before.toObject(), after: updated.toObject(), req,
+    site: primarySite, before: before.toObject(), after: updated.toObject(), req,
   });
   return updated;
 }
@@ -184,7 +216,7 @@ async function deleteWorker(id, actor, req) {
     action: 'delete',
     entityType: 'Worker',
     entityId: id,
-    site: worker.site._id ?? worker.site,
+    site: worker.sites?.[0]?._id ?? worker.site?._id ?? worker.site,
     before: worker.toObject(),
     req,
   });
@@ -205,7 +237,7 @@ async function restoreWorker(id, actor, req) {
     action: 'restore',
     entityType: 'Worker',
     entityId: id,
-    site: worker.site._id ?? worker.site,
+    site: worker.sites?.[0]?._id ?? worker.site?._id ?? worker.site,
     after: restored.toObject(),
     req,
   });
