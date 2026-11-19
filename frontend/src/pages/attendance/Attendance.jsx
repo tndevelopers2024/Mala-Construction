@@ -82,7 +82,7 @@ export default function Attendance() {
 
   // Effective site ID for the Mark Attendance drawer popup
   const drawerTargetSiteId = isSuperAdmin ? (drawerSiteId || undefined) : siteId;
-  const drawerAttendanceQuery = useDailyAttendance({ siteId: drawerTargetSiteId, date: getLocalDateString() });
+  const drawerAttendanceQuery = useDailyAttendance({ siteId: drawerTargetSiteId, date: selectedDate || getLocalDateString() });
 
   // Local state for drawer attendance rows
   const [drawerRows, setDrawerRows] = useState([]);
@@ -90,7 +90,7 @@ export default function Attendance() {
 
   // Previous Day Copy Query for Drawer
   const [copyFetchEnabled, setCopyFetchEnabled] = useState(false);
-  const prevDayQuery = usePreviousDayWorkers({ siteId: drawerTargetSiteId, date: getLocalDateString() }, copyFetchEnabled);
+  const prevDayQuery = usePreviousDayWorkers({ siteId: drawerTargetSiteId, date: selectedDate || getLocalDateString() }, copyFetchEnabled);
 
   // Tab 2 ("All Records") State
   const [historyPeriod, setHistoryPeriod] = useState('month'); // 'today' | 'week' | 'month' | 'custom'
@@ -173,7 +173,7 @@ export default function Attendance() {
             isMarked: l.isMarked,
             attendanceId: l.attendanceId,
             remarks: l.remarks || '',
-            inList: l.isMarked || count > 0,
+            inList: true,
           };
         })
       );
@@ -192,7 +192,7 @@ export default function Attendance() {
       return [];
     }
 
-    return mainAttendanceQuery.data.leaders.filter((l) => l.isMarked);
+    return mainAttendanceQuery.data.leaders;
   }, [mainAttendanceQuery.data, selectedDate]);
 
   // Client-side filtering on main table rows
@@ -210,37 +210,43 @@ export default function Attendance() {
         return false;
       }
 
-      if (statusFilter && row.status !== statusFilter) {
-        return false;
-      }
+        if (statusFilter) {
+          if (statusFilter === 'not_marked') {
+            if (row.isMarked) return false;
+          } else if (statusFilter === 'present') {
+            if (!row.isMarked || (row.status !== 'present' && (row.workerCount || 0) <= 0)) return false;
+          } else if (statusFilter === 'absent') {
+            if (!row.isMarked || (row.status !== 'absent' && (row.workerCount || 0) > 0)) return false;
+          }
+        }
 
-      return true;
-    });
+        return true;
+      });
   }, [mainTableRows, search, professionFilter, statusFilter]);
 
   // Calculated summary stats for Daily View
   const summaryTotals = useMemo(() => {
-    const isRecorded = mainTableRows.length > 0;
+    const isRecorded = (mainAttendanceQuery.data?.leaders || []).some((l) => l.isMarked);
     let presentLeaders = 0;
     let totalWorkers = 0;
     let totalLabourExpense = 0;
 
-    mainTableRows.forEach((r) => {
-      if (r.status === 'present' || r.workerCount > 0) {
-        presentLeaders += 1;
-        totalWorkers += r.workerCount;
-        totalLabourExpense += r.totalAmount;
-      }
-    });
+        (mainAttendanceQuery.data?.leaders || []).forEach((r) => {
+          if (r.isMarked && (r.status === 'present' || r.workerCount > 0)) {
+            presentLeaders += 1;
+            totalWorkers += r.workerCount;
+            totalLabourExpense += r.totalAmount;
+          }
+        });
 
-    return {
-      totalLeaders: mainAttendanceQuery.data?.leaders?.length || 0,
-      presentLeaders,
-      totalWorkers,
-      totalLabourExpense,
-      isRecorded,
-    };
-  }, [mainTableRows, mainAttendanceQuery.data]);
+        return {
+          totalLeaders: mainAttendanceQuery.data?.leaders?.length || 0,
+          presentLeaders,
+          totalWorkers,
+          totalLabourExpense,
+          isRecorded,
+        };
+  }, [mainAttendanceQuery.data]);
 
   // Reset filters handlers
   const handleResetFilters = () => {
@@ -351,8 +357,8 @@ export default function Attendance() {
             </thead>
             <tbody>
               ${records
-                .map(
-                  (r) => `
+        .map(
+          (r) => `
                 <tr>
                   <td>${formatDate(r.date)}</td>
                   <td>${r.site?.name || 'N/A'}</td>
@@ -363,8 +369,8 @@ export default function Attendance() {
                   <td>₹${r.dailyWage ?? 0}</td>
                   <td class="text-right">₹${r.totalAmount ?? 0}</td>
                 </tr>`
-                )
-                .join('')}
+        )
+        .join('')}
             </tbody>
           </table>
         </body>
@@ -435,6 +441,7 @@ export default function Attendance() {
         { value: '', label: 'All Statuses' },
         { value: 'present', label: 'Present Only' },
         { value: 'absent', label: 'Absent Only' },
+        { value: 'not_marked', label: 'Not Marked / Draft' },
       ],
     });
 
@@ -637,9 +644,10 @@ export default function Attendance() {
     }
 
     try {
+      const targetDate = selectedDate || getLocalDateString();
       const payload = {
         site: targetSite,
-        date: getLocalDateString(),
+        date: targetDate,
         records: drawerRows.map((r) => ({
           worker: r.worker,
           workerCount: r.inList && r.isPresent ? Math.max(0, Number(r.workerCount) || 0) : 0,
@@ -651,7 +659,7 @@ export default function Attendance() {
       await saveDailyMutation.mutateAsync(payload);
       setIsDirty(false);
       setIsPanelOpen(false);
-      toast.success(`Daily attendance saved for today (${formatDate(getLocalDateString())}).`);
+      toast.success(`Daily attendance saved for (${formatDate(targetDate)}).`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to save attendance.');
     }
@@ -823,10 +831,10 @@ export default function Attendance() {
               <div className="sites-page__state sites-page__state--empty" style={{ padding: '48px 24px' }}>
                 <Inbox size={40} />
                 <p style={{ margin: 0, fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                  No attendance records logged for {formatDate(selectedDate)}.
+                  No worker leaders assigned to {selectedSite ? selectedSite.name : 'this project site'}.
                 </p>
                 <p style={{ margin: '4px 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                  Click "Mark Attendance" to log daily worker counts and labour costs for this date.
+                  Assign worker leaders to this project site from the Workers section to manage daily attendance.
                 </p>
               </div>
             ) : filteredTableRows.length === 0 ? (
@@ -869,9 +877,10 @@ export default function Attendance() {
                   </thead>
                   <tbody>
                     {filteredTableRows.map((row, idx) => {
-                      const cnt = row.status === 'present' || row.workerCount > 0 ? row.workerCount : 0;
+                      const isMarked = !!row.isMarked;
+                      const cnt = isMarked && (row.status === 'present' || row.workerCount > 0) ? row.workerCount : 0;
                       const wage = row.dailyWage ?? 0;
-                      const cost = cnt * wage;
+                      const cost = isMarked ? cnt * wage : 0;
 
                       return (
                         <tr key={row._id} className="attendance-table__row">
@@ -902,7 +911,12 @@ export default function Attendance() {
                                   {row.name[0]}
                                 </div>
                               )}
-                              <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{row.name}</span>
+                              <div>
+                                <div style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{row.name}</div>
+                                {row.workerId && (
+                                  <div style={{ fontSize: '11px', color: 'var(--color-text-tertiary)' }}>{row.workerId}</div>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td>
@@ -920,27 +934,47 @@ export default function Attendance() {
                           <td>
                             <span
                               className={`attendance-status-badge ${
-                                row.status === 'present' || cnt > 0
+                                !isMarked
+                                  ? 'attendance-status-badge--draft'
+                                  : row.status === 'present' || cnt > 0
                                   ? 'attendance-status-badge--present'
                                   : 'attendance-status-badge--absent'
                               }`}
                             >
-                              {row.status === 'present' || cnt > 0 ? <UserCheck size={12} /> : <UserX size={12} />}
-                              <span>{row.status === 'present' || cnt > 0 ? 'Present' : 'Absent'}</span>
+                              {!isMarked ? (
+                                <>
+                                  <AlertCircle size={12} />
+                                  <span>Not Marked</span>
+                                </>
+                              ) : row.status === 'present' || cnt > 0 ? (
+                                <>
+                                  <UserCheck size={12} />
+                                  <span>Present</span>
+                                </>
+                              ) : (
+                                <>
+                                  <UserX size={12} />
+                                  <span>Absent</span>
+                                </>
+                              )}
                             </span>
                           </td>
-                          <td style={{ textAlign: 'center', fontWeight: 700, color: cnt > 0 ? 'var(--color-primary-700)' : 'var(--color-text-tertiary)' }}>
-                            <span className={cnt > 0 ? 'cnt-active' : 'cnt-zero'}>{cnt} Workers</span>
+                          <td style={{ textAlign: 'center', fontWeight: 700, color: isMarked && cnt > 0 ? 'var(--color-primary-700)' : 'var(--color-text-tertiary)' }}>
+                            {isMarked ? (
+                              <span className={cnt > 0 ? 'cnt-active' : 'cnt-zero'}>{cnt} Workers</span>
+                            ) : (
+                              <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)' }}>—</span>
+                            )}
                           </td>
                           <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
                             {formatCurrency(wage)} / day
                           </td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: cnt > 0 ? 'var(--color-primary-800)' : 'var(--color-text-tertiary)' }}>
-                            {formatCurrency(cost)}
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: isMarked && cnt > 0 ? 'var(--color-primary-800)' : 'var(--color-text-tertiary)' }}>
+                            {isMarked ? formatCurrency(cost) : '—'}
                           </td>
                           <td>
                             <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)', fontStyle: row.remarks ? 'normal' : 'italic' }}>
-                              {row.remarks || 'No remarks'}
+                              {row.remarks || (isMarked ? 'No remarks' : '—')}
                             </span>
                           </td>
                         </tr>
@@ -1205,11 +1239,10 @@ export default function Attendance() {
                           </td>
                           <td>
                             <span
-                              className={`attendance-status-badge ${
-                                row.status === 'present' || cnt > 0
+                              className={`attendance-status-badge ${row.status === 'present' || cnt > 0
                                   ? 'attendance-status-badge--present'
                                   : 'attendance-status-badge--absent'
-                              }`}
+                                }`}
                             >
                               {row.status === 'present' || cnt > 0 ? <UserCheck size={12} /> : <UserX size={12} />}
                               <span>{row.status === 'present' || cnt > 0 ? 'Present' : 'Absent'}</span>

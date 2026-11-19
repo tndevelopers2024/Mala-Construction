@@ -2,6 +2,7 @@ const attendanceRepo = require('../repositories/attendance.repository');
 const Attendance = require('../models/Attendance');
 const Profession = require('../models/Profession');
 const Worker = require('../models/Worker');
+const Site = require('../models/Site');
 const ApiError = require('../utils/ApiError');
 const { resolveSiteScope, assertSiteAccess } = require('../utils/siteScope');
 const { recordActivity, logActivity } = require('./auditLogService');
@@ -76,7 +77,11 @@ async function recordAttendance(data, actor, file) {
 
   if (workerRef) {
     // Validate worker belongs to this site
-    const workerDoc = await Worker.findOne({ _id: workerRef, site, isDeleted: false });
+    const workerDoc = await Worker.findOne({
+      _id: workerRef,
+      $or: [{ sites: site }, { site: site }],
+      isDeleted: false,
+    });
     if (!workerDoc) throw ApiError.badRequest('Worker not found or does not belong to this site');
 
     resolvedWorkerRef = workerDoc._id;
@@ -159,7 +164,7 @@ async function recordAttendance(data, actor, file) {
   await logActivity({
     actor: actor._id,
     site,
-    action: 'created',
+    action: 'create',
     entityType: 'Attendance',
     entityId: record._id,
     description: `Logged labour entry for ${record.workerName || 'Worker'} (${record.contractor})`,
@@ -221,8 +226,11 @@ async function recordBatchAttendance(payload, actor) {
   const workerDocCache = {};
   const workerDocIds = [...new Set(workerRefs.map(String))];
   if (workerDocIds.length > 0) {
-    const docs = await Worker.find({ _id: { $in: workerDocIds }, site, isDeleted: false })
-      .select('_id name phone profession dailyWage workerId');
+    const docs = await Worker.find({
+      _id: { $in: workerDocIds },
+      $or: [{ sites: site }, { site: site }],
+      isDeleted: false,
+    }).select('_id name phone profession dailyWage workerId');
     docs.forEach((d) => { workerDocCache[d._id.toString()] = d; });
   }
 
@@ -323,7 +331,7 @@ async function recordBatchAttendance(payload, actor) {
   await logActivity({
     actor: actor._id,
     site,
-    action: 'created',
+    action: 'create',
     entityType: 'Attendance',
     entityId: inserted[0]?._id,
     description: `Batch logged ${inserted.length} workers for profession "${profName}"${duplicates.length ? ` (${duplicates.length} skipped as duplicates)` : ''}`,
@@ -647,14 +655,19 @@ async function getDailyAttendance(queryParams, actor) {
 
   const { dayStart, queryStart, queryEnd, isoDateStr } = parseDayBounds(date);
 
+  const sitesQuery = targetSiteId
+    ? { $or: [{ sites: targetSiteId }, { site: targetSiteId }] }
+    : {};
+
   const workerQuery = {
-    ...siteFilter,
+    ...sitesQuery,
     status: 'active',
     isDeleted: false,
   };
 
   const leaders = await Worker.find(workerQuery)
     .populate('profession', 'name')
+    .populate('sites', 'name code')
     .populate('site', 'name code')
     .sort({ name: 1 });
 
@@ -688,7 +701,7 @@ async function getDailyAttendance(queryParams, actor) {
     const isMarked = !!rec;
     const workerCount = isMarked ? (rec.workerCount ?? 0) : (leader.workerCount ?? 1);
     const dailyWage = isMarked ? (rec.dailyWage ?? 0) : (leader.dailyWage ?? 0);
-    const status = isMarked ? (rec.status || (rec.workerCount > 0 ? 'present' : 'absent')) : 'absent';
+    const status = isMarked ? (rec.status || (rec.workerCount > 0 ? 'present' : 'absent')) : 'not_marked';
     const totalAmount = isMarked ? workerCount * dailyWage : 0;
 
     if (isMarked) {
@@ -696,13 +709,18 @@ async function getDailyAttendance(queryParams, actor) {
       totalLabourExpense += totalAmount;
     }
 
+    const assignedSite = (leader.sites && leader.sites.find((s) => s._id?.toString() === targetSiteId?.toString())) || leader.site || (leader.sites && leader.sites[0]);
+    const siteObj = assignedSite
+      ? { _id: assignedSite._id, name: assignedSite.name, code: assignedSite.code }
+      : (leader.site ? { _id: leader.site._id, name: leader.site.name, code: leader.site.code } : null);
+
     return {
       _id: leader._id,
       workerId: leader.workerId,
       name: leader.name,
       photo: leader.photo,
       profession: leader.profession,
-      site: leader.site ? { _id: leader.site._id, name: leader.site.name, code: leader.site.code } : null,
+      site: siteObj,
       defaultWorkerCount: leader.workerCount ?? 1,
       workerCount,
       dailyWage,
@@ -742,7 +760,11 @@ async function saveDailyAttendance(payload, actor) {
   for (const item of records) {
     if (!item.worker) continue;
 
-    const workerDoc = await Worker.findOne({ _id: item.worker, site: targetSiteId, isDeleted: false });
+    const workerDoc = await Worker.findOne({
+      _id: item.worker,
+      $or: [{ sites: targetSiteId }, { site: targetSiteId }],
+      isDeleted: false,
+    });
     if (!workerDoc) continue;
 
     const count = Number(item.workerCount) >= 0 ? Number(item.workerCount) : (workerDoc.workerCount ?? 1);
@@ -791,7 +813,7 @@ async function saveDailyAttendance(payload, actor) {
   await logActivity({
     actor: actor._id,
     site: targetSiteId,
-    action: 'created',
+    action: 'create',
     entityType: 'Attendance',
     description: `Saved daily attendance for ${savedRecords.length} worker leader(s) on ${isoDateStr}`,
   });
