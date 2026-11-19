@@ -80,9 +80,15 @@ export default function Attendance() {
   const [drawerSiteId, setDrawerSiteId] = useState('');
   const [selectedLeaderToAdd, setSelectedLeaderToAdd] = useState('');
 
+  // Target date for attendance operations
+  const targetDate = selectedDate || getLocalDateString();
+
   // Effective site ID for the Mark Attendance drawer popup
   const drawerTargetSiteId = isSuperAdmin ? (drawerSiteId || undefined) : siteId;
-  const drawerAttendanceQuery = useDailyAttendance({ siteId: drawerTargetSiteId, date: selectedDate || getLocalDateString() });
+  const drawerAttendanceQuery = useDailyAttendance(
+    { siteId: drawerTargetSiteId, date: targetDate },
+    { enabled: isSuperAdmin ? !!drawerSiteId : !!siteId }
+  );
 
   // Local state for drawer attendance rows
   const [drawerRows, setDrawerRows] = useState([]);
@@ -90,7 +96,10 @@ export default function Attendance() {
 
   // Previous Day Copy Query for Drawer
   const [copyFetchEnabled, setCopyFetchEnabled] = useState(false);
-  const prevDayQuery = usePreviousDayWorkers({ siteId: drawerTargetSiteId, date: selectedDate || getLocalDateString() }, copyFetchEnabled);
+  const prevDayQuery = usePreviousDayWorkers(
+    { siteId: drawerTargetSiteId, date: targetDate },
+    copyFetchEnabled && (isSuperAdmin ? !!drawerSiteId : !!siteId)
+  );
 
   // Tab 2 ("All Records") State
   const [historyPeriod, setHistoryPeriod] = useState('month'); // 'today' | 'week' | 'month' | 'custom'
@@ -144,14 +153,18 @@ export default function Attendance() {
   // Synchronize drawer site selection when drawer opens
   useEffect(() => {
     if (isPanelOpen) {
-      if (isSuperAdmin) {
-        const defaultSite = siteFilter || activeSites.data?.[0]?._id || '';
-        setDrawerSiteId(defaultSite);
-      } else {
-        setDrawerSiteId(siteId || '');
+      if (!drawerSiteId) {
+        if (isSuperAdmin) {
+          const defaultSite = siteFilter || activeSites.data?.[0]?._id || '';
+          if (defaultSite) setDrawerSiteId(defaultSite);
+        } else {
+          setDrawerSiteId(siteId || '');
+        }
       }
+    } else {
+      setDrawerSiteId('');
     }
-  }, [isPanelOpen, isSuperAdmin, siteFilter, siteId, activeSites.data]);
+  }, [isPanelOpen, isSuperAdmin, siteFilter, siteId, activeSites.data, drawerSiteId]);
 
   // Populate drawer rows whenever drawer query loads or site changes
   useEffect(() => {
@@ -178,10 +191,10 @@ export default function Attendance() {
         })
       );
       setIsDirty(false);
-    } else {
+    } else if (!drawerAttendanceQuery.isLoading && !drawerAttendanceQuery.isFetching) {
       setDrawerRows([]);
     }
-  }, [drawerAttendanceQuery.data, drawerTargetSiteId]);
+  }, [drawerAttendanceQuery.data, drawerAttendanceQuery.isLoading, drawerAttendanceQuery.isFetching, drawerTargetSiteId]);
 
   // Main table active rows derived from mainAttendanceQuery
   const mainTableRows = useMemo(() => {
@@ -1351,7 +1364,7 @@ export default function Attendance() {
             <div className="attendance-drawer-field">
               <label className="attendance-drawer-label">Attendance Date</label>
               <div className="attendance-drawer-read-badge">
-                <Calendar size={15} /> {formatDate(getLocalDateString())}
+                <Calendar size={15} /> {formatDate(targetDate)}
               </div>
             </div>
 
@@ -1399,7 +1412,7 @@ export default function Attendance() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
                 <div className="attendance-summary-header">
                   <div className="attendance-summary-title">
-                    ATTENDANCE LIST FOR {formatDate(getLocalDateString()).toUpperCase()} ({drawerActiveRows.length} LEADER{drawerActiveRows.length !== 1 ? 'S' : ''})
+                    ATTENDANCE LIST FOR {formatDate(targetDate).toUpperCase()} ({drawerActiveRows.length} LEADER{drawerActiveRows.length !== 1 ? 'S' : ''})
                   </div>
                   <div className="attendance-summary-stats">
                     <span>Total Labours: <strong>{drawerTotals.totalWorkers}</strong></span>
@@ -1408,15 +1421,28 @@ export default function Attendance() {
                   </div>
                 </div>
 
-                {drawerAttendanceQuery.isLoading ? (
+                {drawerAttendanceQuery.isLoading || drawerAttendanceQuery.isFetching ? (
                   <div style={{ padding: '32px', textAlign: 'center' }}>
                     <p style={{ margin: 0, color: 'var(--color-text-secondary)' }}>Loading site workers...</p>
+                  </div>
+                ) : drawerAttendanceQuery.isError ? (
+                  <div className="sites-page__state sites-page__state--empty" style={{ padding: '32px' }}>
+                    <AlertCircle size={32} style={{ color: 'var(--color-danger-500, #ef4444)' }} />
+                    <p style={{ margin: '8px 0 0', color: 'var(--color-danger-700, #b91c1c)', fontWeight: 600 }}>
+                      Unable to load site workers
+                    </p>
+                    <p style={{ margin: '4px 0 12px', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)' }}>
+                      {drawerAttendanceQuery.error?.response?.data?.message || drawerAttendanceQuery.error?.message || 'Error occurred while fetching workers.'}
+                    </p>
+                    <Button variant="secondary" size="sm" onClick={() => drawerAttendanceQuery.refetch()}>
+                      Retry
+                    </Button>
                   </div>
                 ) : drawerActiveRows.length === 0 ? (
                   <div className="sites-page__state sites-page__state--empty" style={{ padding: '32px' }}>
                     <Inbox size={32} />
                     <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontWeight: 500 }}>
-                      No Worker Leaders registered for this site on {formatDate(getLocalDateString())}.
+                      No Worker Leaders registered for this site on {formatDate(targetDate)}.
                     </p>
                     <p style={{ margin: '4px 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)' }}>
                       New active workers added to this site will automatically appear here.

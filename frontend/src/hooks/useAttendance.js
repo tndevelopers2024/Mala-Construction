@@ -83,11 +83,13 @@ export function useUpdateAttendance() {
   });
 }
 
-export function useDailyAttendance(params) {
+export function useDailyAttendance(params, options = {}) {
   return useQuery({
     queryKey: [QUERY_KEYS.ATTENDANCE, 'daily', params],
     queryFn: () => attendanceService.getDaily(params),
-    enabled: !!params?.date,
+    enabled: !!params?.date && (options.enabled !== undefined ? options.enabled : true),
+    placeholderData: (prev) => prev,
+    ...options,
   });
 }
 
