@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Pencil, Trash2, User, Users, RotateCcw, Search, ChevronLeft, ChevronRight, Inbox, Phone, Briefcase, Calendar, DollarSign, MapPin } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, UserCheck, UserX, RotateCcw, ChevronLeft, ChevronRight, Inbox, Phone, MapPin, LayoutGrid, List, ArrowUpRight, Wallet } from 'lucide-react';
 import Button from '../../components/common/Button';
 import ConfirmDialog from '../../components/modals/ConfirmDialog';
 import WorkerFormModal from './WorkerFormModal';
@@ -16,6 +16,7 @@ import { motion } from 'framer-motion';
 import '../../styles/operational-page.css';
 import '../sites/Sites.css';
 import './WorkerProfile.css';
+import './Workers.css';
 
 import { GridCardSkeleton } from '../../components/ui/Skeleton';
 
@@ -35,7 +36,13 @@ export default function Workers() {
   const debouncedSearch = useDebouncedValue(search);
   const { professions, activeSites } = useLookups(activeSiteId);
   const selectedSite = activeSites.data?.find((s) => s._id === activeSiteId);
-  const selectedProfession = professions.data?.find((p) => p._id === professionFilter);
+
+  const [view, setView] = useState(() => {
+    try { return localStorage.getItem('workers-view') || 'grid'; } catch { return 'grid'; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('workers-view', view); } catch { /* storage unavailable */ }
+  }, [view]);
 
   const totalWorkersQuery = useWorkers({
     siteId: activeSiteId,
@@ -43,12 +50,8 @@ export default function Workers() {
   });
   const totalWorkersCount = totalWorkersQuery.data?.total ?? 0;
 
-  const professionWorkersQuery = useWorkers({
-    siteId: activeSiteId,
-    profession: professionFilter || undefined,
-    limit: 1,
-  });
-  const professionWorkersCount = professionWorkersQuery.data?.total ?? 0;
+  const activeWorkersCount = useWorkers({ siteId: activeSiteId, status: 'active', limit: 1 }).data?.total ?? 0;
+  const inactiveWorkersCount = Math.max(0, totalWorkersCount - activeWorkersCount);
 
   const { data, isLoading, isError, isFetching } = useWorkers({
     page,
@@ -118,216 +121,204 @@ export default function Workers() {
     setPage(1);
   };
 
+  const items = data?.items ?? [];
+  const sitesOf = (w) => (w.sites?.length ? w.sites : [w.site]).filter(Boolean);
+  const crewCost = (w) => (Number(w.workerCount) || 1) * (Number(w.dailyWage) || 0);
+
+  const renderActions = (w) =>
+    w.isDeleted ? (
+      <button type="button" className="wk-btn wk-btn--ghost" onClick={() => setConfirmTarget({ type: 'restore', worker: w })}>
+        <RotateCcw size={15} /> Restore
+      </button>
+    ) : (
+      <>
+        <Link to={`/workers/${w._id}`} className="wk-btn wk-btn--ghost" title="View profile">
+          Profile <ArrowUpRight size={14} />
+        </Link>
+        <button type="button" className="wk-icon" onClick={() => { setEditing(w); setIsFormOpen(true); }} title="Edit" aria-label={`Edit ${w.name}`}>
+          <Pencil size={16} />
+        </button>
+        <button type="button" className="wk-icon wk-icon--danger" onClick={() => setConfirmTarget({ type: 'delete', worker: w })} title="Delete" aria-label={`Delete ${w.name}`}>
+          <Trash2 size={16} />
+        </button>
+      </>
+    );
+
+  const renderAvatar = (w, size = 56) =>
+    w.photo?.url ? (
+      <img src={w.photo.url} alt={w.name} className="wk-avatar" style={{ width: size, height: size }} />
+    ) : (
+      <div className="wk-avatar wk-avatar--initial" style={{ width: size, height: size, fontSize: size * 0.4 }}>
+        {w.name?.[0]?.toUpperCase()}
+      </div>
+    );
+
+  const renderStatus = (w) =>
+    w.isDeleted ? (
+      <span className="wk-pill wk-pill--deleted">Deleted</span>
+    ) : (
+      <span className={`wk-pill wk-pill--${w.status === 'active' ? 'active' : 'inactive'}`}>
+        <i /> {w.status === 'active' ? 'Active' : 'Inactive'}
+      </span>
+    );
+
   return (
     <div className="module-page">
       <div className="module-page__header">
         <div>
           <h1>Worker Leaders</h1>
-          <p>Supervise Worker Leaders, team worker counts, professions, and daily wage structures.</p>
+          <p>Manage leaders, their crew size, trade and daily wage.</p>
         </div>
         <Button onClick={() => { setEditing(null); setIsFormOpen(true); }}>
           <Plus size={18} /> Add Worker Leader
         </Button>
       </div>
 
-      <div className="module-page__kpi-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 'var(--space-md)' }}>
-        <Card className="worker-kpi-card">
-          <div className="worker-kpi-card__header">
-            <span>{selectedSite ? `Total Leaders (${selectedSite.name})` : 'Total Leaders (All Sites)'}</span>
-            <Users size={18} className="worker-kpi-card__icon" />
-          </div>
-          <h3>{totalWorkersQuery.isLoading ? '...' : totalWorkersCount}</h3>
-        </Card>
-
-        {selectedProfession && (
-          <Card className="worker-kpi-card">
-            <div className="worker-kpi-card__header">
-              <span>
-                {selectedSite
-                  ? `Total ${selectedProfession.name} Leaders (${selectedSite.name})`
-                  : `Total ${selectedProfession.name} Leaders (All Sites)`}
-              </span>
-              <Briefcase size={18} className="worker-kpi-card__icon" style={{ color: 'var(--color-success-600, #16a34a)' }} />
-            </div>
-            <h3>{professionWorkersQuery.isLoading ? '...' : professionWorkersCount}</h3>
-          </Card>
-        )}
+      <div className="wk-stats">
+        <div className="wk-stat wk-stat--blue">
+          <span className="wk-stat__icon"><Users size={22} /></span>
+          <div><small>{selectedSite ? selectedSite.name : 'All sites'}</small><strong>{totalWorkersQuery.isLoading ? '…' : totalWorkersCount}</strong><span>Total leaders</span></div>
+        </div>
+        <div className="wk-stat wk-stat--green">
+          <span className="wk-stat__icon"><UserCheck size={22} /></span>
+          <div><strong>{activeWorkersCount}</strong><span>Active</span></div>
+        </div>
+        <div className="wk-stat wk-stat--slate">
+          <span className="wk-stat__icon"><UserX size={22} /></span>
+          <div><strong>{inactiveWorkersCount}</strong><span>Inactive</span></div>
+        </div>
       </div>
 
-      <FilterToolbar
-        search={search}
-        onSearchChange={(v) => { setSearch(v); setPage(1); }}
-        searchPlaceholder="Search leaders by name..."
-        filters={filterConfig}
-        onReset={handleReset}
-      />
+      {/* Trade quick filters */}
+      {professions.data?.length > 0 && (
+        <div className="wk-chips" role="tablist" aria-label="Filter by trade">
+          <button type="button" className={`wk-chip ${!professionFilter ? 'is-on' : ''}`} onClick={() => { setProfessionFilter(''); setPage(1); }}>All trades</button>
+          {professions.data.map((p) => (
+            <button key={p._id} type="button" className={`wk-chip ${professionFilter === p._id ? 'is-on' : ''}`} onClick={() => { setProfessionFilter(p._id); setPage(1); }}>
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="wk-toolbar">
+        <div className="wk-toolbar__filters">
+          <FilterToolbar
+            search={search}
+            onSearchChange={(v) => { setSearch(v); setPage(1); }}
+            searchPlaceholder="Search leaders by name…"
+            filters={filterConfig.filter((f) => f.key !== 'profession')}
+            onReset={handleReset}
+          />
+        </div>
+        <div className="wk-view" role="group" aria-label="Layout">
+          <button type="button" className={view === 'grid' ? 'is-on' : ''} onClick={() => setView('grid')} aria-label="Card view" title="Card view"><LayoutGrid size={18} /></button>
+          <button type="button" className={view === 'list' ? 'is-on' : ''} onClick={() => setView('list')} aria-label="List view" title="List view"><List size={18} /></button>
+        </div>
+      </div>
 
       {isError && (
         <div className="sites-page__state sites-page__state--error" role="alert">
-          Failed to load worker leaders database. Please try reloading.
+          Failed to load worker leaders. Please try reloading.
         </div>
       )}
 
-      {!isError && (isLoading || (isFetching && !data?.items?.length)) && (
-        <div className="sites-page__grid">
-          <GridCardSkeleton count={6} />
+      {!isError && (isLoading || (isFetching && !items.length)) && (
+        <div className="sites-page__grid"><GridCardSkeleton count={6} /></div>
+      )}
+
+      {!isError && !isLoading && items.length === 0 && (
+        <div className="wk-empty">
+          <Inbox size={36} />
+          <strong>No worker leaders found</strong>
+          <span>Try clearing the filters, or add your first leader.</span>
+          <Button onClick={() => { setEditing(null); setIsFormOpen(true); }}><Plus size={18} /> Add Worker Leader</Button>
         </div>
       )}
 
-      {!isError && !isLoading && (data?.items ?? []).length === 0 && (
-        <div className="sites-page__state sites-page__state--empty">
-          <Inbox size={32} />
-          <span>No worker leaders registered. Click "Add Worker Leader" to create one.</span>
-        </div>
-      )}
-
-      {!isError && !isLoading && (data?.items ?? []).length > 0 && (
+      {!isError && !isLoading && items.length > 0 && (
         <>
-          <div className="sites-page__grid">
-            {data.items.map((w) => (
-              <motion.div
-                key={w._id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Card className={`site-card ${w.isDeleted ? 'site-card--deleted' : ''}`}>
-                  <div className="site-card__header" style={{ display: 'flex', gap: 12, alignItems: 'center', margin: 0 }}>
-                    {w.photo?.url ? (
-                      <img
-                        src={w.photo.url}
-                        alt={w.name}
-                        style={{ width: 44, height: 44, borderRadius: 12, objectFit: 'cover' }}
-                      />
-                    ) : (
-                      <div
-                        className="ui-avatar"
-                        style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--color-primary-100)', color: 'var(--color-primary-700)', fontWeight: 700 }}
-                      >
-                        {w.name[0]}
-                      </div>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <h3 className="site-card__title" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>
-                        <span style={{ fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-primary)' }}>
-                          {w.name}
-                        </span>
-                      </h3>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                        <span className="site-card__code" style={{ textTransform: 'capitalize', fontWeight: 600 }}>
-                          {w.profession?.name || 'Mason'}
-                        </span>
-                        {w.workerId && (
-                          <span style={{ fontSize: 'var(--font-size-xs)', fontFamily: 'monospace', background: 'var(--color-primary-50)', color: 'var(--color-primary-700)', border: '1px solid var(--color-primary-200)', borderRadius: 4, padding: '1px 6px', fontWeight: 600 }}>
-                            {w.workerId}
-                          </span>
-                        )}
-                      </div>
+          {view === 'grid' ? (
+            <div className="wk-grid">
+              {items.map((w, i) => (
+                <motion.article
+                  key={w._id}
+                  className={`wk-card ${w.isDeleted ? 'is-deleted' : ''}`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, delay: Math.min(i, 8) * 0.03 }}
+                >
+                  <div className="wk-card__banner" />
+                  <div className="wk-card__top">
+                    {renderAvatar(w)}
+                    {renderStatus(w)}
+                  </div>
+                  <div className="wk-card__id">
+                    <h3>{w.name}</h3>
+                    <div className="wk-card__sub">
+                      <span className="wk-trade">{w.profession?.name || 'General'}</span>
+                      {w.workerId && <code>{w.workerId}</code>}
                     </div>
-                    {w.isDeleted ? (
-                      <span className="status-badge status-badge--suspended">Deleted</span>
-                    ) : (
-                      <span className={`status-badge status-badge--${w.status === 'active' ? 'active' : 'inactive'}`}>
-                        {w.status}
-                      </span>
-                    )}
                   </div>
 
-                  <div className="site-card__body" style={{ marginTop: 'var(--space-md)' }}>
-                    <div className="site-card__info-row" style={{ fontWeight: 600, color: 'var(--color-primary-800)', background: 'var(--color-primary-50)', padding: '6px 10px', borderRadius: 6 }}>
-                      <Users size={16} className="site-card__icon" style={{ color: 'var(--color-primary-600)' }} />
-                      <span>Workers Under Leader: <strong>{w.workerCount ?? 1}</strong></span>
-                    </div>
-                    <div className="site-card__info-row">
-                      <DollarSign size={15} className="site-card__icon" />
-                      <span>Daily Wage: <strong>{formatCurrency(w.dailyWage)}</strong> / worker</span>
-                    </div>
+                  <div className="wk-metrics">
+                    <div><small>Labours</small><strong>{w.workerCount ?? 1}</strong></div>
+                    <div><small>Wage / day</small><strong>{formatCurrency(w.dailyWage)}</strong></div>
+                    <div><small>Crew / day</small><strong className="wk-metrics__hl">{formatCurrency(crewCost(w))}</strong></div>
+                  </div>
+
+                  <div className="wk-card__meta">
                     {(w.phone || w.emergencyContact?.phone) && (
-                      <div className="site-card__info-row">
-                        <Phone size={15} className="site-card__icon" />
-                        <span>{w.phone || w.emergencyContact?.phone}</span>
-                      </div>
+                      <a href={`tel:${w.phone || w.emergencyContact?.phone}`} className="wk-meta"><Phone size={14} /> {w.phone || w.emergencyContact?.phone}</a>
                     )}
-                    <div className="site-card__info-row" style={{ flexWrap: 'wrap' }}>
-                      <MapPin size={15} className="site-card__icon" style={{ flexShrink: 0 }} />
-                      {(w.sites?.length ? w.sites : [w.site]).filter(Boolean).map((s) => (
-                        <span
-                          key={s?._id ?? s}
-                          style={{
-                            display: 'inline-block',
-                            fontSize: 'var(--font-size-xs)',
-                            fontWeight: 600,
-                            background: 'var(--color-primary-50)',
-                            color: 'var(--color-primary-700)',
-                            border: '1px solid var(--color-primary-200)',
-                            borderRadius: 'var(--radius-full, 999px)',
-                            padding: '1px 8px',
-                          }}
-                        >
-                          {s?.name ?? 'Assigned Site'}
-                        </span>
-                      ))}
+                    <div className="wk-meta wk-meta--sites">
+                      <MapPin size={14} />
+                      {sitesOf(w).length ? sitesOf(w).map((s) => <span key={s?._id ?? s} className="wk-site">{s?.name ?? 'Assigned site'}</span>) : <span className="wk-muted">No site assigned</span>}
                     </div>
                   </div>
 
-                  <div className="site-card__actions" style={{ display: 'flex', gap: 8, marginTop: 'var(--space-md)' }}>
-                    {w.isDeleted ? (
-                      <button
-                        type="button"
-                        className="site-card__btn site-card__btn--restore touch-target"
-                        onClick={() => setConfirmTarget({ type: 'restore', worker: w })}
-                        title="Restore worker leader"
-                      >
-                        <RotateCcw size={16} /> Restore
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className="site-card__btn touch-target"
-                          onClick={() => { setEditing(w); setIsFormOpen(true); }}
-                          title="Edit details"
-                          style={{ flex: 1 }}
-                        >
-                          <Pencil size={16} /> Edit Leader
-                        </button>
-                        <button
-                          type="button"
-                          className="site-card__btn site-card__btn--danger touch-target"
-                          onClick={() => setConfirmTarget({ type: 'delete', worker: w })}
-                          title="Delete worker leader"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
+                  <div className="wk-card__actions">{renderActions(w)}</div>
+                </motion.article>
+              ))}
+            </div>
+          ) : (
+            <div className="wk-table-wrap">
+              <table className="wk-table">
+                <thead>
+                  <tr>
+                    <th>Leader</th><th>Trade</th><th>Site</th><th className="r">Labours</th><th className="r">Wage / day</th><th className="r">Crew / day</th><th>Status</th><th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((w) => (
+                    <tr key={w._id} className={w.isDeleted ? 'is-deleted' : ''}>
+                      <td>
+                        <div className="wk-cell">
+                          {renderAvatar(w, 36)}
+                          <div><Link to={`/workers/${w._id}`} className="wk-link">{w.name}</Link>{w.workerId && <small>{w.workerId}</small>}</div>
+                        </div>
+                      </td>
+                      <td><span className="wk-trade">{w.profession?.name || 'General'}</span></td>
+                      <td>{sitesOf(w).map((s) => s?.name).filter(Boolean).join(', ') || '—'}</td>
+                      <td className="r">{w.workerCount ?? 1}</td>
+                      <td className="r">{formatCurrency(w.dailyWage)}</td>
+                      <td className="r"><strong>{formatCurrency(crewCost(w))}</strong></td>
+                      <td>{renderStatus(w)}</td>
+                      <td><div className="wk-row-actions">{renderActions(w)}</div></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {data.totalPages > 1 && (
             <div className="sites-page__pagination">
-              <button
-                type="button"
-                className="pagination-btn touch-target"
-                onClick={() => setPage(page - 1)}
-                disabled={page <= 1}
-                aria-label="Previous page"
-              >
+              <button type="button" className="pagination-btn touch-target" onClick={() => setPage(page - 1)} disabled={page <= 1} aria-label="Previous page">
                 <ChevronLeft size={16} />
               </button>
-              <span className="pagination-label">
-                Page {page} of {data.totalPages}
-              </span>
-              <button
-                type="button"
-                className="pagination-btn touch-target"
-                onClick={() => setPage(page + 1)}
-                disabled={page >= data.totalPages}
-                aria-label="Next page"
-              >
+              <span className="pagination-label">Page {page} of {data.totalPages}</span>
+              <button type="button" className="pagination-btn touch-target" onClick={() => setPage(page + 1)} disabled={page >= data.totalPages} aria-label="Next page">
                 <ChevronRight size={16} />
               </button>
             </div>

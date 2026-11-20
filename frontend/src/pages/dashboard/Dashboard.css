@@ -564,3 +564,281 @@
     gap: 4px;
   }
 }
+/* ==========================================================================
+   Refreshed dashboard: grouped stat cards, tonal icons, quick actions
+   ========================================================================== */
+.dashboard__group { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.dashboard__group-title {
+  margin: 0; font-size: var(--font-size-xs); font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--color-text-secondary);
+}
+.dashboard__cards-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+
+.stat-card { padding: 18px; border-radius: var(--radius-card); box-shadow: var(--shadow-sm); height: 100%; }
+.stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--color-border); }
+.stat-card__content { flex-direction: row; align-items: center; gap: 14px; }
+.stat-card__icon-wrapper { width: 48px; height: 48px; border-radius: 14px; background: var(--tone-bg); color: var(--tone-fg); }
+.stat-card__value { font-size: 22px; font-variant-numeric: tabular-nums; }
+.stat-card__label { font-size: var(--font-size-sm); }
+.stat-card__content--blue   { --tone-bg: #e8f0fe; --tone-fg: #2563eb; }
+.stat-card__content--green  { --tone-bg: #e3f7ea; --tone-fg: #16a34a; }
+.stat-card__content--amber  { --tone-bg: #fef3dc; --tone-fg: #d97706; }
+.stat-card__content--violet { --tone-bg: #efe9fe; --tone-fg: #7c3aed; }
+.stat-card__content--rose   { --tone-bg: #fde8ea; --tone-fg: #e11d48; }
+.stat-card__content--teal   { --tone-bg: #dff6f4; --tone-fg: #0d9488; }
+[data-theme='dark'] .stat-card__content .stat-card__icon-wrapper { background: color-mix(in srgb, var(--tone-fg) 18%, transparent); }
+
+.dashboard__quick { display: flex; flex-wrap: wrap; gap: 10px; }
+.dashboard__quick-btn {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px;
+  border: 1px solid var(--color-border); border-radius: var(--radius-full); background: var(--color-surface);
+  color: var(--color-text-primary); font-weight: 600; font-size: var(--font-size-sm); text-decoration: none;
+  box-shadow: var(--shadow-sm); transition: background var(--duration-fast), transform var(--duration-fast);
+}
+.dashboard__quick-btn:hover { background: var(--color-steel-100); }
+.dashboard__quick-btn:active { transform: scale(0.98); }
+.dashboard__quick-btn--primary { background: var(--color-primary-500); border-color: transparent; color: #fff; }
+.dashboard__quick-btn--primary:hover { background: var(--color-primary-600); }
+
+/* ==========================================================================
+   Glassmorphism 2.0 — layered, selective, performance-aware
+   Tiers:  L0 ambient light  ·  L1 stat cards (tint, no blur)
+           L2 panels (blur 18)  ·  L3 floating dock (blur 28, strongest)
+   ========================================================================== */
+.dashboard {
+  --g-tint: rgba(255, 255, 255, 0.58);
+  --g-tint-strong: rgba(255, 255, 255, 0.74);
+  --g-edge-hi: rgba(255, 255, 255, 0.95);
+  --g-edge-lo: rgba(255, 255, 255, 0.25);
+  --g-edge-accent: rgba(37, 99, 235, 0.35);
+  --g-sheen: rgba(255, 255, 255, 0.55);
+  --g-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05), 0 6px 16px -4px rgba(30, 58, 138, 0.10);
+  --g-shadow-2: 0 2px 4px rgba(15, 23, 42, 0.05), 0 16px 36px -8px rgba(30, 58, 138, 0.18);
+  --g-shadow-3: 0 4px 8px rgba(15, 23, 42, 0.06), 0 24px 48px -10px rgba(30, 58, 138, 0.28);
+  position: relative;
+  isolation: isolate;
+}
+[data-theme='dark'] .dashboard {
+  --g-tint: rgba(30, 41, 59, 0.55);
+  --g-tint-strong: rgba(30, 41, 59, 0.72);
+  --g-edge-hi: rgba(255, 255, 255, 0.28);
+  --g-edge-lo: rgba(255, 255, 255, 0.04);
+  --g-edge-accent: rgba(96, 165, 250, 0.35);
+  --g-sheen: rgba(255, 255, 255, 0.10);
+  --g-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 16px -4px rgba(0, 0, 0, 0.35);
+  --g-shadow-2: 0 2px 4px rgba(0, 0, 0, 0.3), 0 16px 36px -8px rgba(0, 0, 0, 0.45);
+  --g-shadow-3: 0 4px 8px rgba(0, 0, 0, 0.35), 0 24px 48px -10px rgba(0, 0, 0, 0.55);
+}
+
+/* L0 — ambient illumination: static gradients (cheap), spread over the full page height */
+.dashboard::before {
+  content: '';
+  position: absolute;
+  inset: -24px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 45% 22% at 8% 2%, rgba(59, 130, 246, 0.30), transparent 70%),
+    radial-gradient(ellipse 40% 20% at 94% 8%, rgba(139, 92, 246, 0.24), transparent 70%),
+    radial-gradient(ellipse 42% 22% at 72% 48%, rgba(20, 184, 166, 0.16), transparent 70%),
+    radial-gradient(ellipse 40% 22% at 12% 78%, rgba(245, 158, 11, 0.12), transparent 70%),
+    radial-gradient(ellipse 45% 20% at 85% 96%, rgba(59, 130, 246, 0.18), transparent 70%);
+}
+[data-theme='dark'] .dashboard::before { opacity: 0.8; }
+
+/* Shared glass anatomy: gradient hairline border + top-left reflection, both under content */
+.dashboard .stat-card,
+.dashboard .chart-panel,
+.dashboard .activity-panel,
+.dashboard .dashboard__quick--dock {
+  position: relative;
+  border: 0;
+  overflow: hidden;
+}
+.dashboard .stat-card::before,
+.dashboard .chart-panel::before,
+.dashboard .activity-panel::before,
+.dashboard .dashboard__quick--dock::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--g-edge-hi), var(--g-edge-lo) 38%, var(--g-edge-lo) 62%, var(--g-edge-accent));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+}
+.dashboard .chart-panel::after,
+.dashboard .activity-panel::after,
+.dashboard .dashboard__quick--dock::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(125deg, var(--g-sheen) 0%, transparent 32%);
+  pointer-events: none;
+  z-index: 0;
+}
+.dashboard .chart-panel > *,
+.dashboard .activity-panel > * { position: relative; z-index: 1; }
+
+/* L1 — stat cards: tinted glass, no backdrop blur (12+ blurred layers would cost frames) */
+.dashboard .stat-card {
+  background: var(--g-tint);
+  box-shadow: var(--g-shadow-1);
+  transition: transform var(--duration-base) var(--ease-standard), box-shadow var(--duration-base) var(--ease-standard);
+}
+.dashboard .stat-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(220px circle at var(--mx, 20%) var(--my, 0%), var(--g-sheen), transparent 65%);
+  opacity: 0;
+  transition: opacity var(--duration-base);
+  pointer-events: none;
+}
+.dashboard .stat-card:hover { transform: translateY(-3px); box-shadow: var(--g-shadow-2); }
+.dashboard .stat-card:hover::after { opacity: 1; }
+.dashboard .stat-card__content { position: relative; z-index: 1; }
+
+/* L2 — chart + activity panels: frosted, medium blur */
+.dashboard .chart-panel,
+.dashboard .activity-panel {
+  background: var(--g-tint-strong);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: var(--g-shadow-2);
+  transition: transform var(--duration-base) var(--ease-standard), box-shadow var(--duration-base) var(--ease-standard);
+}
+.dashboard .chart-panel:hover,
+.dashboard .activity-panel:hover { transform: translateY(-2px); box-shadow: var(--g-shadow-3); }
+.dashboard .activity-panel { -webkit-backdrop-filter: blur(14px) saturate(140%); backdrop-filter: blur(14px) saturate(140%); }
+
+/* L3 — floating action dock: strongest blur, sticks above content so cards scroll beneath it */
+.dashboard .dashboard__quick--dock {
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px;
+  border-radius: 999px;
+  background: var(--g-tint-strong);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  box-shadow: var(--g-shadow-3);
+}
+.dashboard .dashboard__quick--dock .dashboard__quick-btn {
+  background: transparent; border-color: transparent; box-shadow: none; position: relative; z-index: 1;
+}
+.dashboard .dashboard__quick--dock .dashboard__quick-btn:hover { background: rgba(37, 99, 235, 0.10); }
+.dashboard .dashboard__quick--dock .dashboard__quick-btn--primary {
+  background: linear-gradient(135deg, var(--color-primary-500), #4f46e5); color: #fff;
+  box-shadow: 0 6px 16px -4px rgba(37, 99, 235, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* Readability: keep secondary text above AA on glass */
+.dashboard .stat-card__label,
+.dashboard .activity-panel__time { color: var(--color-steel-600); }
+[data-theme='dark'] .dashboard .stat-card__label,
+[data-theme='dark'] .dashboard .activity-panel__time { color: var(--color-steel-300); }
+
+/* Fallbacks: no backdrop-filter support, or user prefers reduced transparency → solid surfaces */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .dashboard { --g-tint: var(--color-surface); --g-tint-strong: var(--color-surface); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .dashboard { --g-tint: var(--color-surface); --g-tint-strong: var(--color-surface); }
+  .dashboard .chart-panel, .dashboard .activity-panel, .dashboard .dashboard__quick--dock {
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+}
+@media (max-width: 640px) {
+  .dashboard .dashboard__quick--dock { border-radius: 20px; width: 100%; }
+  /* cheaper blur on small devices */
+  .dashboard .chart-panel, .dashboard .activity-panel { -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+}
+
+/* ==========================================================================
+   Glass 2.0 — corrections: real page-level light, hero banner, balanced grids
+   ========================================================================== */
+/* `overflow-x:hidden` silently made .dashboard a scroll container, which clipped the glow and
+   broke the sticky dock. `clip` hides overflow without creating a scroller. */
+.dashboard { overflow-x: clip; background: transparent; gap: 28px; }
+
+/* Ambient light is now pinned to the viewport: cards drift over it as you scroll (parallax depth) */
+.dashboard::before {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(60vmax 40vmax at 12% -5%, rgba(59, 130, 246, 0.34), transparent 65%),
+    radial-gradient(50vmax 36vmax at 100% 5%, rgba(139, 92, 246, 0.28), transparent 65%),
+    radial-gradient(55vmax 38vmax at 85% 70%, rgba(20, 184, 166, 0.20), transparent 65%),
+    radial-gradient(50vmax 36vmax at 0% 95%, rgba(245, 158, 11, 0.16), transparent 65%);
+}
+[data-theme='dark'] .dashboard::before { opacity: 0.7; }
+
+/* ---- Hero banner ---- */
+.dash-hero {
+  position: relative; overflow: hidden; isolation: isolate;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px;
+  padding: 28px 32px; border-radius: 24px; color: #fff;
+  background:
+    radial-gradient(420px 220px at 90% 0%, rgba(255, 255, 255, 0.28), transparent 70%),
+    radial-gradient(380px 260px at 0% 100%, rgba(56, 189, 248, 0.35), transparent 70%),
+    linear-gradient(120deg, #1d4ed8 0%, #4f46e5 55%, #7c3aed 100%);
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 24px 48px -12px rgba(67, 56, 202, 0.45);
+}
+.dash-hero::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.05) 40%, rgba(255, 255, 255, 0.3));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
+.dash-hero__eyebrow { font-size: var(--font-size-xs); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255, 255, 255, 0.8); }
+.dash-hero h1 { margin: 6px 0 6px; font-size: clamp(26px, 3vw, 34px); font-weight: 800; letter-spacing: -0.03em; color: #fff; }
+.dash-hero p { margin: 0; max-width: 46ch; font-size: var(--font-size-sm); color: rgba(255, 255, 255, 0.85); }
+.dash-hero__pulse { display: flex; flex-wrap: wrap; gap: 12px; }
+.dash-hero__chip {
+  display: flex; flex-direction: column; gap: 2px; min-width: 140px; padding: 12px 16px; border-radius: 16px;
+  background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(255, 255, 255, 0.28);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.dash-hero__chip small { font-size: var(--font-size-xs); color: rgba(255, 255, 255, 0.82); }
+.dash-hero__chip strong { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; }
+
+/* ---- Balanced card grids (auto-fit stretches 4–6 items evenly; no orphans) ---- */
+.dashboard .dashboard__cards-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+.dashboard .dashboard__cards-grid--hero { grid-template-columns: minmax(250px, 1.2fr) repeat(3, minmax(0, 1fr)); }
+.dashboard .stat-slot--hero { grid-row: span 2; }
+.dashboard .stat-card { padding: 20px; }
+
+.dashboard .stat-card--hero { display: flex; }
+.dashboard .stat-card--hero .stat-card__content { flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 28px; width: 100%; }
+.dashboard .stat-card--hero .stat-card__icon-wrapper { width: 60px; height: 60px; border-radius: 18px; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #fff; box-shadow: 0 10px 22px -6px rgba(79, 70, 229, 0.6); }
+.dashboard .stat-card--hero .stat-card__label { font-size: var(--font-size-base); }
+.dashboard .stat-card--hero .stat-card__value { font-size: clamp(30px, 3vw, 40px); letter-spacing: -0.03em; }
+
+.dashboard .dashboard__group-title { display: flex; align-items: center; gap: 12px; }
+.dashboard .dashboard__group-title::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--color-border), transparent); }
+
+/* Dock sits just under the hero and now stays pinned while scrolling */
+.dashboard .dashboard__quick--dock { top: 76px; }
+
+@media (max-width: 1100px) {
+  .dashboard .dashboard__cards-grid--hero { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard .stat-slot--hero { grid-column: 1 / -1; grid-row: auto; }
+  .dashboard .stat-card--hero .stat-card__content { flex-direction: row; align-items: center; gap: 16px; }
+}
+@media (max-width: 640px) {
+  .dash-hero { padding: 20px; border-radius: 20px; }
+  .dash-hero__chip { flex: 1 1 140px; }
+  .dashboard .dashboard__cards-grid,
+  .dashboard .dashboard__cards-grid--hero { grid-template-columns: 1fr; }
+  .dashboard .dashboard__quick--dock { top: 68px; }
+}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -73,26 +74,34 @@ const ICON_MAP = {
   'Pending Payments': CreditCard,
 };
 
-const MOCK_BADGES = ['+2.08%', '+12.4%', '-2.08%', '+12.1%', '+5.34%', '+1.8%', '+2.3%', '-1.04%'];
+const TONES = {
+  'Total Expenses': 'blue',
+  'Total Sites': 'teal',
+  'Active Sites': 'teal',
+  'Site Admins': 'violet',
+  'Total Workers': 'green',
+  'Workers Present Today': 'green',
+  'Today Labour Expense': 'blue',
+  'Weekly Labour Expense': 'blue',
+  'Monthly Labour Expense': 'blue',
+  'Material Cost': 'amber',
+  "Today's Purchases": 'amber',
+  'Monthly Purchases': 'amber',
+  'Worker Payments': 'violet',
+  'Pending Payments': 'rose',
+  'Other Expenses': 'rose',
+};
 
-function StatCard({ label, value, format = 'currency', isFeatured = false, badgeIndex = 0 }) {
+function StatCard({ label, value, format = 'currency', isFeatured = false }) {
   const IconComponent = ICON_MAP[label] || Activity;
   const display = format === 'currency' ? formatCurrency(value) : value ?? 0;
-  const badgeText = MOCK_BADGES[badgeIndex % MOCK_BADGES.length];
-  const isNegative = badgeText.startsWith('-');
+  const tone = TONES[label] || 'blue';
 
   return (
-    <div className={`stat-card__content ${isFeatured ? 'stat-card__content--featured' : ''}`}>
-      <div className="stat-card__top">
-        <div className="stat-card__icon-wrapper">
-          <IconComponent size={20} className="stat-card__icon" />
-        </div>
-        <span className={`stat-card__badge ${isNegative ? 'stat-card__badge--negative' : 'stat-card__badge--positive'}`}>
-          {isNegative ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
-          {badgeText}
-        </span>
+    <div className={`stat-card__content stat-card__content--${tone} ${isFeatured ? 'stat-card__content--featured' : ''}`}>
+      <div className="stat-card__icon-wrapper">
+        <IconComponent size={20} className="stat-card__icon" />
       </div>
-
       <div className="stat-card__body">
         <span className="stat-card__label">{label}</span>
         <h3 className="stat-card__value">{display}</h3>
@@ -223,6 +232,15 @@ export default function Dashboard() {
     if (closeDrawer) setIsFilterDrawerOpen(false);
   };
 
+  // Moves the soft highlight on a hovered glass card (CSS vars only, no re-render).
+  const handleSpotlight = (e) => {
+    const card = e.target.closest?.('.stat-card');
+    if (!card) return;
+    const r = card.getBoundingClientRect();
+    card.style.setProperty('--mx', `${e.clientX - r.left}px`);
+    card.style.setProperty('--my', `${e.clientY - r.top}px`);
+  };
+
   if (isLoading && !data) return <DashboardSkeleton />;
   if (isError) {
     return (
@@ -237,36 +255,59 @@ export default function Dashboard() {
 
   const { cards = {}, charts = {}, recent = {} } = data || {};
 
-  const superAdminCards = [
-    { label: 'Total Expenses', value: cards.totalExpenses },
-    { label: 'Total Sites', value: cards.totalSites, format: 'number' },
-    { label: 'Active Sites', value: cards.activeSites, format: 'number' },
-    { label: 'Site Admins', value: cards.siteAdmins, format: 'number' },
-    { label: 'Total Workers', value: cards.totalWorkers, format: 'number' },
-    { label: 'Workers Present Today', value: cards.todayWorkersPresent, format: 'number' },
-    { label: 'Today Labour Expense', value: cards.todayLabourExpense },
-    { label: 'Weekly Labour Expense', value: cards.weeklyLabourExpense },
-    { label: 'Monthly Labour Expense', value: cards.monthlyLabourExpense },
-    { label: 'Material Cost', value: cards.totalMaterialCost },
-    { label: 'Worker Payments', value: cards.totalWorkerPayments },
-    { label: 'Other Expenses', value: cards.totalOtherExpenses },
-  ];
+  const cardGroups = isSuperAdmin
+    ? [
+        {
+          title: 'Spending',
+          hero: true,
+          items: [
+            { label: 'Total Expenses', value: cards.totalExpenses },
+            { label: 'Today Labour Expense', value: cards.todayLabourExpense },
+            { label: 'Weekly Labour Expense', value: cards.weeklyLabourExpense },
+            { label: 'Monthly Labour Expense', value: cards.monthlyLabourExpense },
+            { label: 'Material Cost', value: cards.totalMaterialCost },
+            { label: 'Worker Payments', value: cards.totalWorkerPayments },
+            { label: 'Other Expenses', value: cards.totalOtherExpenses },
+          ],
+        },
+        {
+          title: 'Sites & people',
+          items: [
+            { label: 'Total Sites', value: cards.totalSites, format: 'number' },
+            { label: 'Active Sites', value: cards.activeSites, format: 'number' },
+            { label: 'Site Admins', value: cards.siteAdmins, format: 'number' },
+            { label: 'Total Workers', value: cards.totalWorkers, format: 'number' },
+            { label: 'Workers Present Today', value: cards.todayWorkersPresent, format: 'number' },
+          ],
+        },
+      ]
+    : [
+        {
+          title: 'Today',
+          items: [
+            { label: 'Workers Present Today', value: cards.todayWorkersPresent, format: 'number' },
+            { label: 'Today Labour Expense', value: cards.todayLabourExpense },
+            { label: "Today's Purchases", value: cards.todayPurchases },
+            { label: 'Pending Payments', value: cards.pendingPayments, format: 'number' },
+          ],
+        },
+        {
+          title: 'Spending',
+          items: [
+            { label: 'Total Expenses', value: cards.totalExpenses },
+            { label: 'Weekly Labour Expense', value: cards.weeklyLabourExpense },
+            { label: 'Monthly Labour Expense', value: cards.monthlyLabourExpense },
+            { label: 'Monthly Purchases', value: cards.monthlyPurchases },
+            { label: 'Worker Payments', value: cards.workerPayments },
+            { label: 'Other Expenses', value: cards.otherExpenses },
+          ],
+        },
+        {
+          title: 'Workforce',
+          items: [{ label: 'Total Workers', value: cards.totalWorkers, format: 'number' }],
+        },
+      ];
 
-  const siteAdminCards = [
-    { label: 'Total Expenses', value: cards.totalExpenses },
-    { label: 'Workers Present Today', value: cards.todayWorkersPresent, format: 'number' },
-    { label: 'Today Labour Expense', value: cards.todayLabourExpense },
-    { label: 'Weekly Labour Expense', value: cards.weeklyLabourExpense },
-    { label: 'Monthly Labour Expense', value: cards.monthlyLabourExpense },
-    { label: "Today's Purchases", value: cards.todayPurchases },
-    { label: 'Monthly Purchases', value: cards.monthlyPurchases },
-    { label: 'Total Workers', value: cards.totalWorkers, format: 'number' },
-    { label: 'Worker Payments', value: cards.workerPayments },
-    { label: 'Other Expenses', value: cards.otherExpenses },
-    { label: 'Pending Payments', value: cards.pendingPayments, format: 'number' },
-  ];
-
-  const cardItems = isSuperAdmin ? superAdminCards : siteAdminCards;
   const trendData = charts?.monthlyTrend ?? [];
   const breakdownData = charts?.expenseBreakdown ?? [];
   const sitePerformance = charts?.sitePerformance ?? [];
@@ -435,12 +476,23 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard">
-      <div className="dashboard__header-section" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-        <div className="dashboard__info-header">
+      <header className="dash-hero">
+        <div className="dash-hero__text">
+          <span className="dash-hero__eyebrow">
+            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </span>
           <h1>{isSuperAdmin ? 'Company Overview' : 'Site Performance'}</h1>
-          <p>Real-time construction financial analytics and operational metrics</p>
+          <p>Live financial and operational snapshot across your construction projects.</p>
         </div>
-      </div>
+        <div className="dash-hero__pulse">
+          <div className="dash-hero__chip"><small>Workers present</small><strong>{cards.todayWorkersPresent ?? 0}</strong></div>
+          <div className="dash-hero__chip"><small>Labour today</small><strong>{formatCurrency(cards.todayLabourExpense)}</strong></div>
+          <div className="dash-hero__chip">
+            <small>{isSuperAdmin ? 'Active sites' : 'Pending payments'}</small>
+            <strong>{(isSuperAdmin ? cards.activeSites : cards.pendingPayments) ?? 0}</strong>
+          </div>
+        </div>
+      </header>
 
       <Drawer
         isOpen={isFilterDrawerOpen}
@@ -545,21 +597,35 @@ export default function Dashboard() {
         </div>
       </Drawer>
 
-      {/* Stat Cards Grid */}
-      <div className="dashboard__cards-grid">
-        {cardItems.map((c, index) => (
-          <motion.div
-            key={c.label}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.03, duration: 0.3 }}
-          >
-            <Card className={`stat-card ${index === 0 ? 'stat-card--featured' : ''}`}>
-              <StatCard label={c.label} value={c.value} format={c.format} isFeatured={index === 0} badgeIndex={index} />
-            </Card>
-          </motion.div>
-        ))}
+      {/* Quick actions */}
+      <div className="dashboard__quick dashboard__quick--dock">
+        <Link to="/attendance" className="dashboard__quick-btn dashboard__quick-btn--primary"><Users size={18} /> Mark attendance</Link>
+        <Link to="/expenses" className="dashboard__quick-btn"><DollarSign size={18} /> Add expense</Link>
+        <Link to="/materials" className="dashboard__quick-btn"><Hammer size={18} /> Log material</Link>
+        <Link to="/payments" className="dashboard__quick-btn"><CreditCard size={18} /> Worker payment</Link>
       </div>
+
+      {/* Stat cards, grouped by meaning */}
+      {cardGroups.map((group) => (
+        <section key={group.title} className="dashboard__group">
+          <h2 className="dashboard__group-title">{group.title}</h2>
+          <div className={`dashboard__cards-grid ${group.hero ? 'dashboard__cards-grid--hero' : ''}`} onPointerMove={handleSpotlight}>
+            {group.items.map((c, index) => (
+              <motion.div
+                key={c.label}
+                className={group.hero && index === 0 ? 'stat-slot--hero' : undefined}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.03, duration: 0.25 }}
+              >
+                <Card className={`stat-card ${group.hero && index === 0 ? 'stat-card--hero' : ''}`}>
+                  <StatCard label={c.label} value={c.value} format={c.format} />
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </section>
+      ))}
 
       {isFetching && !isLoading && (
         <div className="dashboard__loading-banner">Updating dashboard results…</div>

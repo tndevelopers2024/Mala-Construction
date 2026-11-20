@@ -187,3 +187,52 @@ img {
     display: none !important;
   }
 }
+/* ==========================================================================
+   Global polish layer — applies the refreshed look across every page
+   ========================================================================== */
+h1, h2, h3 { letter-spacing: -0.01em; }
+
+/* Cards: soft border, subtle lift on hover where interactive */
+.card { border-radius: var(--radius-card); box-shadow: var(--shadow-sm); }
+
+/* Form controls: taller (44px touch target), clear focus ring */
+.form-input, .form-select, .ui-input {
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  transition: border-color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard);
+}
+.form-input:focus, .form-select:focus, .ui-input:focus {
+  outline: 0;
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px var(--color-primary-50);
+}
+[data-theme='dark'] .form-input:focus,
+[data-theme='dark'] .form-select:focus { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3); }
+
+/* Tables: quieter header, comfortable rows, hover highlight */
+table { border-collapse: collapse; }
+thead th {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  background: var(--color-steel-50);
+}
+tbody tr { transition: background var(--duration-fast) var(--ease-standard); }
+tbody tr:hover { background: var(--color-steel-50); }
+[data-theme='dark'] thead th, [data-theme='dark'] tbody tr:hover { background: rgba(255, 255, 255, 0.04); }
+
+/* Buttons: tactile press feedback */
+.btn:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+
+/* Dark-mode companions for the attendance drawer */
+[data-theme='dark'] .att2-chip,
+[data-theme='dark'] .att2-row.is-absent { background: rgba(255, 255, 255, 0.04); }
+[data-theme='dark'] .att2-stepper button { background: rgba(255, 255, 255, 0.06); }
+[data-theme='dark'] .att2-bulk-btn--ok { background: rgba(22, 163, 74, 0.15); border-color: rgba(22, 163, 74, 0.4); }
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

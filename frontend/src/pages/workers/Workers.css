@@ -1,0 +1,95 @@
+/* Workers page — rich cards, list view, stats, trade chips */
+.wk-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.wk-stat { display: flex; align-items: center; gap: 14px; padding: 16px 18px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); box-shadow: var(--shadow-sm); }
+.wk-stat__icon { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; flex: none; }
+.wk-stat > div { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.wk-stat small { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+.wk-stat strong { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wk-stat > div > span { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.wk-stat--blue .wk-stat__icon { background: #e8f0fe; color: #2563eb; }
+.wk-stat--green .wk-stat__icon { background: #e3f7ea; color: #16a34a; }
+.wk-stat--slate .wk-stat__icon { background: #eceff4; color: #64748b; }
+
+.wk-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.wk-chip { flex: none; height: 38px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-secondary); font: inherit; font-size: var(--font-size-sm); font-weight: 600; cursor: pointer; transition: all var(--duration-fast); }
+.wk-chip:hover { border-color: var(--color-primary-300); color: var(--color-primary-600); }
+.wk-chip.is-on { background: var(--color-primary-500); border-color: var(--color-primary-500); color: #fff; }
+
+.wk-toolbar { display: flex; gap: 12px; align-items: flex-start; }
+.wk-toolbar__filters { flex: 1; min-width: 0; }
+.wk-view { display: inline-flex; padding: 4px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); gap: 2px; flex: none; }
+.wk-view button { width: 40px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--color-text-secondary); cursor: pointer; }
+.wk-view button.is-on { background: var(--color-primary-50); color: var(--color-primary-600); }
+
+.wk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+.wk-card { position: relative; display: flex; flex-direction: column; gap: 14px; padding: 0 20px 18px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); box-shadow: var(--shadow-sm); overflow: hidden; transition: box-shadow var(--duration-base), transform var(--duration-base); }
+.wk-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.wk-card.is-deleted { opacity: 0.65; }
+.wk-card__banner { height: 64px; margin: 0 -20px; background: linear-gradient(120deg, #2563eb 0%, #7c3aed 100%); }
+.wk-card__top { display: flex; justify-content: space-between; align-items: flex-end; margin-top: -30px; }
+.wk-avatar { border-radius: 16px; object-fit: cover; border: 3px solid var(--color-surface); box-shadow: var(--shadow-sm); flex: none; }
+.wk-avatar--initial { display: grid; place-items: center; background: var(--color-primary-50); color: var(--color-primary-600); font-weight: 700; }
+.wk-card__id h3 { margin: 0; font-size: var(--font-size-lg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-card__sub { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+.wk-card__sub code, .wk-cell small { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+.wk-trade { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--color-primary-50); color: var(--color-primary-600); font-size: var(--font-size-xs); font-weight: 600; text-transform: capitalize; }
+
+.wk-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: var(--font-size-xs); font-weight: 600; }
+.wk-pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.wk-pill--active { background: #dcfce7; color: #166534; }
+.wk-pill--inactive { background: #eceff4; color: #475569; }
+.wk-pill--deleted { background: #fee2e2; color: #b91c1c; }
+
+.wk-metrics { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-steel-50); }
+.wk-metrics > div { display: flex; flex-direction: column; padding: 10px 12px; min-width: 0; }
+.wk-metrics > div + div { border-left: 1px solid var(--color-border); }
+.wk-metrics small { font-size: 11px; color: var(--color-text-secondary); }
+.wk-metrics strong { font-size: var(--font-size-base); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wk-metrics__hl { color: var(--color-primary-600); }
+
+.wk-card__meta { display: flex; flex-direction: column; gap: 8px; font-size: var(--font-size-sm); }
+.wk-meta { display: flex; align-items: center; gap: 8px; color: var(--color-text-secondary); text-decoration: none; }
+.wk-meta svg { flex: none; }
+a.wk-meta:hover { color: var(--color-primary-600); }
+.wk-meta--sites { flex-wrap: wrap; }
+.wk-site { padding: 1px 9px; border-radius: 999px; border: 1px solid var(--color-border); font-size: var(--font-size-xs); font-weight: 600; color: var(--color-text-primary); }
+.wk-muted { font-style: italic; }
+
+.wk-card__actions, .wk-row-actions { display: flex; align-items: center; gap: 6px; margin-top: auto; }
+.wk-card__actions .wk-btn { flex: 1; }
+.wk-row-actions { justify-content: flex-end; margin: 0; }
+.wk-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 40px; padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); font: inherit; font-size: var(--font-size-sm); font-weight: 600; text-decoration: none; cursor: pointer; }
+.wk-btn:hover { background: var(--color-steel-100); }
+.wk-icon { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text-secondary); cursor: pointer; }
+.wk-icon:hover { background: var(--color-steel-100); color: var(--color-text-primary); }
+.wk-icon--danger:hover { background: var(--color-danger-100); color: var(--color-danger-500); border-color: transparent; }
+
+.wk-table-wrap { overflow-x: auto; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); box-shadow: var(--shadow-sm); }
+.wk-table { width: 100%; min-width: 820px; }
+.wk-table th, .wk-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--color-border); vertical-align: middle; }
+.wk-table tbody tr:last-child td { border-bottom: 0; }
+.wk-table .r { text-align: right; font-variant-numeric: tabular-nums; }
+.wk-table tr.is-deleted { opacity: 0.6; }
+.wk-cell { display: flex; align-items: center; gap: 12px; }
+.wk-cell > div { display: flex; flex-direction: column; }
+.wk-cell .wk-avatar { border-width: 0; border-radius: 50%; }
+.wk-link { font-weight: 600; color: var(--color-text-primary); text-decoration: none; }
+.wk-link:hover { color: var(--color-primary-600); }
+
+.wk-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 56px 16px; text-align: center; border: 1px dashed var(--color-border); border-radius: var(--radius-card); color: var(--color-text-secondary); }
+.wk-empty strong { color: var(--color-text-primary); font-size: var(--font-size-lg); }
+.wk-empty .btn { margin-top: 8px; }
+
+[data-theme='dark'] .wk-metrics { background: rgba(255, 255, 255, 0.04); }
+[data-theme='dark'] .wk-stat--blue .wk-stat__icon { background: rgba(37, 99, 235, 0.2); }
+[data-theme='dark'] .wk-stat--green .wk-stat__icon { background: rgba(22, 163, 74, 0.2); }
+[data-theme='dark'] .wk-stat--slate .wk-stat__icon { background: rgba(148, 163, 184, 0.18); }
+[data-theme='dark'] .wk-pill--active { background: rgba(22, 163, 74, 0.2); color: #86efac; }
+[data-theme='dark'] .wk-pill--inactive { background: rgba(148, 163, 184, 0.18); color: #cbd5e1; }
+[data-theme='dark'] .wk-pill--deleted { background: rgba(220, 38, 38, 0.2); color: #fca5a5; }
+
+@media (max-width: 640px) {
+  .wk-toolbar { flex-direction: column-reverse; align-items: stretch; }
+  .wk-view { align-self: flex-end; }
+  .wk-grid { grid-template-columns: 1fr; }
+}

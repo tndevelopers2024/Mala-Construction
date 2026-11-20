@@ -21,6 +21,10 @@ import {
   ChevronUp,
   ChevronDown,
   TrendingUp,
+  Search,
+  Plus,
+  Minus,
+  StickyNote,
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import DatePickerInput from '../../components/ui/DatePickerInput';
@@ -39,6 +43,7 @@ import {
 import { useToast } from '../../contexts/ToastContext';
 import { formatCurrency, formatDate } from '../../utils/format';
 import '../../styles/operational-page.css';
+import '../../styles/glass.css';
 import '../sites/Sites.css';
 import './Attendance.css';
 
@@ -93,6 +98,8 @@ export default function Attendance() {
   // Local state for drawer attendance rows
   const [drawerRows, setDrawerRows] = useState([]);
   const [isDirty, setIsDirty] = useState(false);
+  const [drawerSearch, setDrawerSearch] = useState('');
+  const [openNotes, setOpenNotes] = useState(() => new Set());
 
   // Previous Day Copy Query for Drawer
   const [copyFetchEnabled, setCopyFetchEnabled] = useState(false);
@@ -260,6 +267,8 @@ export default function Attendance() {
           isRecorded,
         };
   }, [mainAttendanceQuery.data]);
+
+  const markedCount = useMemo(() => mainTableRows.filter((r) => r.isMarked).length, [mainTableRows]);
 
   // Reset filters handlers
   const handleResetFilters = () => {
@@ -549,6 +558,39 @@ export default function Attendance() {
     setIsDirty(true);
   };
 
+  // Stepper: reaching 0 marks absent; any positive number marks present.
+  const handleStep = (workerId, next) => {
+    const n = Math.max(0, next);
+    setDrawerRows((prev) =>
+      prev.map((r) => (r.worker === workerId ? { ...r, workerCount: n, isPresent: n > 0 } : r))
+    );
+    setIsDirty(true);
+  };
+
+  const handleMarkAll = (present) => {
+    setDrawerRows((prev) =>
+      prev.map((r) =>
+        r.inList
+          ? {
+              ...r,
+              isPresent: present,
+              workerCount: present ? (r.workerCount > 0 ? r.workerCount : (r.defaultWorkerCount ?? 1)) : 0,
+            }
+          : r
+      )
+    );
+    setIsDirty(true);
+  };
+
+  const toggleNote = (workerId) => {
+    setOpenNotes((prev) => {
+      const next = new Set(prev);
+      if (next.has(workerId)) next.delete(workerId);
+      else next.add(workerId);
+      return next;
+    });
+  };
+
   const handleRemarksChange = (workerId, val) => {
     setDrawerRows((prev) =>
       prev.map((r) => (r.worker === workerId ? { ...r, remarks: val } : r))
@@ -629,6 +671,14 @@ export default function Attendance() {
     return drawerRows.filter((r) => r.inList);
   }, [drawerRows]);
 
+  const visibleDrawerRows = useMemo(() => {
+    const term = drawerSearch.trim().toLowerCase();
+    if (!term) return drawerActiveRows;
+    return drawerActiveRows.filter(
+      (r) => r.name?.toLowerCase().includes(term) || r.profession?.name?.toLowerCase().includes(term)
+    );
+  }, [drawerActiveRows, drawerSearch]);
+
   const drawerUnaddedLeaders = useMemo(() => {
     return drawerRows.filter((r) => !r.inList);
   }, [drawerRows]);
@@ -636,9 +686,11 @@ export default function Attendance() {
   const drawerTotals = useMemo(() => {
     let totalWorkers = 0;
     let totalLabourExpense = 0;
+    let presentLeaders = 0;
 
     drawerActiveRows.forEach((r) => {
       if (r.isPresent) {
+        presentLeaders += 1;
         const cnt = Math.max(0, Number(r.workerCount) || 0);
         const wage = Math.max(0, Number(r.dailyWage) || 0);
         totalWorkers += cnt;
@@ -646,7 +698,7 @@ export default function Attendance() {
       }
     });
 
-    return { totalWorkers, totalLabourExpense };
+    return { totalWorkers, totalLabourExpense, presentLeaders };
   }, [drawerActiveRows]);
 
   const handleSaveAll = async () => {
@@ -679,80 +731,68 @@ export default function Attendance() {
   };
 
   return (
-    <div className="module-page">
-      {/* Module Page Header */}
-      <div className="module-page__header">
+    <div className="module-page glass-page">
+      {/* Hero */}
+      <header className="glass-hero">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <h1 style={{ margin: 0 }}>Attendance Records</h1>
-            {selectedSite ? (
-              <span className="attendance-site-badge">
-                <Building2 size={13} /> {selectedSite.name}
-              </span>
-            ) : isSuperAdmin ? (
-              <span className="attendance-site-badge" style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}>
-                <Building2 size={13} /> All Project Sites
-              </span>
-            ) : null}
-          </div>
+          <span className="glass-hero__eyebrow">
+            <Building2 size={12} style={{ verticalAlign: '-1px' }} /> {selectedSite?.name || (isSuperAdmin ? 'All project sites' : 'Assigned site')}
+          </span>
+          <h1>Attendance Records</h1>
           <p>
             {isSuperAdmin && !siteFilter
-              ? 'Viewing worker attendance records across all project sites.'
-              : `Worker attendance records and daily labour expense entries for ${selectedSite?.name || 'assigned site'}.`}
+              ? 'Daily labour attendance and cost across all project sites.'
+              : `Daily labour attendance and cost for ${selectedSite?.name || 'your site'}.`}
           </p>
         </div>
-
-        {/* Primary Action Button */}
-        <div className="attendance-page__header-actions">
-          <Button onClick={() => setIsPanelOpen(true)}>
+        <div className="glass-hero__side">
+          <div className="glass-hero__chip"><small>Leaders present</small><strong>{summaryTotals.presentLeaders}<span style={{ opacity: 0.7, fontSize: 15 }}> / {summaryTotals.totalLeaders}</span></strong></div>
+          <div className="glass-hero__chip"><small>Labours</small><strong>{summaryTotals.totalWorkers}</strong></div>
+          <div className="glass-hero__chip"><small>Labour cost</small><strong>{formatCurrency(summaryTotals.totalLabourExpense)}</strong></div>
+          <button type="button" className="glass-hero__cta" onClick={() => setIsPanelOpen(true)}>
             <Layers size={18} /> Mark Attendance
-          </Button>
+          </button>
         </div>
-      </div>
+      </header>
 
-      {/* Attendance Navigation Tabs */}
-      <div className="attendance-tabs">
-        <button
-          type="button"
-          className={`attendance-tab-btn ${activeTab === 'daily' ? 'attendance-tab-btn--active' : ''}`}
-          onClick={() => setActiveTab('daily')}
-        >
-          <Calendar size={16} />
-          <span>Daily View</span>
+      <div className="glass-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={activeTab === 'daily'} className={activeTab === 'daily' ? 'is-on' : ''} onClick={() => setActiveTab('daily')}>
+          <Calendar size={16} /> Daily View
         </button>
-        <button
-          type="button"
-          className={`attendance-tab-btn ${activeTab === 'history' ? 'attendance-tab-btn--active' : ''}`}
-          onClick={() => setActiveTab('history')}
-        >
-          <Layers size={16} />
-          <span>All Records</span>
+        <button type="button" role="tab" aria-selected={activeTab === 'history'} className={activeTab === 'history' ? 'is-on' : ''} onClick={() => setActiveTab('history')}>
+          <Layers size={16} /> All Records
         </button>
       </div>
 
       {/* TAB 1: DAILY VIEW */}
       {activeTab === 'daily' && (
         <>
+          {/* Status banner: shows what's left to do for this date */}
+          {mainTableRows.length > 0 && (
+            <div className={`att-banner ${markedCount === mainTableRows.length ? 'att-banner--done' : ''}`}>
+              <div className="att-banner__text">
+                <strong>
+                  {markedCount === mainTableRows.length
+                    ? `All ${mainTableRows.length} leaders marked for ${formatDate(selectedDate)}`
+                    : markedCount === 0
+                    ? `Attendance not marked yet for ${formatDate(selectedDate)}`
+                    : `${markedCount} of ${mainTableRows.length} leaders marked`}
+                </strong>
+                <div className="att-banner__bar" aria-hidden="true">
+                  <span style={{ width: `${(markedCount / mainTableRows.length) * 100}%` }} />
+                </div>
+              </div>
+              {markedCount < mainTableRows.length ? (
+                <Button onClick={() => setIsPanelOpen(true)}><Layers size={18} /> Mark now</Button>
+              ) : (
+                <Button variant="secondary" onClick={() => setIsPanelOpen(true)}>Edit</Button>
+              )}
+            </div>
+          )}
+
           {/* KPI Summary Cards Grid */}
           <div className="attendance-kpi-grid">
-            <div className="attendance-kpi-card">
-              <div className="attendance-kpi-card__top">
-                <span className="attendance-kpi-card__label">Project Site</span>
-                <div className="attendance-kpi-card__icon-wrap kpi-icon-blue">
-                  <Building2 size={20} />
-                </div>
-              </div>
-              <div className="attendance-kpi-card__body">
-                <div className="attendance-kpi-card__value attendance-kpi-card__value--site">
-                  {selectedSite?.name || (isSuperAdmin ? 'All Sites' : 'Assigned Site')}
-                </div>
-                <span className="attendance-kpi-card__sub">
-                  {selectedSite?.code ? `Site Code: ${selectedSite.code}` : isSuperAdmin ? `All Sites (${activeSites.data?.length || 0})` : 'Active Site View'}
-                </span>
-              </div>
-            </div>
-
-            <div className="attendance-kpi-card">
+            <div className="attendance-kpi-card glass-tile">
               <div className="attendance-kpi-card__top">
                 <span className="attendance-kpi-card__label">Active Leaders</span>
                 <div className="attendance-kpi-card__icon-wrap kpi-icon-green">
@@ -769,7 +809,7 @@ export default function Attendance() {
               </div>
             </div>
 
-            <div className="attendance-kpi-card">
+            <div className="attendance-kpi-card glass-tile">
               <div className="attendance-kpi-card__top">
                 <span className="attendance-kpi-card__label">Total Labours</span>
                 <div className="attendance-kpi-card__icon-wrap kpi-icon-amber">
@@ -786,7 +826,7 @@ export default function Attendance() {
               </div>
             </div>
 
-            <div className="attendance-kpi-card">
+            <div className="attendance-kpi-card glass-tile">
               <div className="attendance-kpi-card__top">
                 <span className="attendance-kpi-card__label">Daily Labour Cost</span>
                 <div className="attendance-kpi-card__icon-wrap kpi-icon-purple">
@@ -815,7 +855,7 @@ export default function Attendance() {
           />
 
           {/* Main Roster Table */}
-          <Card style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+          <Card className="glass-panel" style={{ padding: 0 }}>
             {/* Table Header Bar */}
             <div style={{ padding: '14px 20px', background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1019,7 +1059,7 @@ export default function Attendance() {
         <>
           {/* History KPI Summary Cards Grid */}
           <div className="attendance-kpi-grid">
-            <div className="attendance-kpi-card">
+            <div className="attendance-kpi-card glass-tile">
               <div className="attendance-kpi-card__top">
                 <span className="attendance-kpi-card__label">Total Days Recorded</span>
                 <div className="attendance-kpi-card__icon-wrap kpi-icon-blue">
@@ -1034,7 +1074,7 @@ export default function Attendance() {
               </div>
             </div>
 
-            <div className="attendance-kpi-card">
+            <div className="attendance-kpi-card glass-tile">
               <div className="attendance-kpi-card__top">
                 <span className="attendance-kpi-card__label">All-Time Labour Cost</span>
                 <div className="attendance-kpi-card__icon-wrap kpi-icon-purple">
@@ -1049,7 +1089,7 @@ export default function Attendance() {
               </div>
             </div>
 
-            <div className="attendance-kpi-card">
+            <div className="attendance-kpi-card glass-tile">
               <div className="attendance-kpi-card__top">
                 <span className="attendance-kpi-card__label">Avg Daily Cost</span>
                 <div className="attendance-kpi-card__icon-wrap kpi-icon-green">
@@ -1064,7 +1104,7 @@ export default function Attendance() {
               </div>
             </div>
 
-            <div className="attendance-kpi-card">
+            <div className="attendance-kpi-card glass-tile">
               <div className="attendance-kpi-card__top">
                 <span className="attendance-kpi-card__label">Total Unique Workers</span>
                 <div className="attendance-kpi-card__icon-wrap kpi-icon-amber">
@@ -1165,7 +1205,7 @@ export default function Attendance() {
           />
 
           {/* All Records Table */}
-          <Card style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+          <Card className="glass-panel" style={{ padding: 0 }}>
             {/* Table Header Bar */}
             <div style={{ padding: '14px 20px', background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1320,233 +1360,204 @@ export default function Attendance() {
         title="Mark Daily Labour Attendance"
         size="lg"
         footer={
-          <div style={{ display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
-            <Button variant="secondary" onClick={() => setIsPanelOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveAll} isLoading={saveDailyMutation.isPending}>
-              <Save size={18} /> Save Attendance Records
-            </Button>
+          <div className="att2-footer">
+            <div className="att2-summary">
+              <div><span>Present</span><strong>{drawerTotals.presentLeaders}/{drawerActiveRows.length}</strong></div>
+              <div><span>Labours</span><strong>{drawerTotals.totalWorkers}</strong></div>
+              <div className="att2-summary-total"><span>Total cost</span><strong>{formatCurrency(drawerTotals.totalLabourExpense)}</strong></div>
+            </div>
+            <div className="att2-footer-btns">
+              <Button variant="secondary" onClick={() => setIsPanelOpen(false)}>Cancel</Button>
+              <Button onClick={handleSaveAll} isLoading={saveDailyMutation.isPending}>
+                <Save size={18} /> Save
+              </Button>
+            </div>
           </div>
         }
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
-          {/* Top Section Controls Bar: Project Site, Attendance Date (UI ONLY), Import Previous Day */}
-          <div className="attendance-drawer-header-box">
-            {/* Project Site Selection */}
+        <div className="att2">
+          {/* Context bar: site, date, import */}
+          <div className="att2-context">
             {isSuperAdmin ? (
-              <div className="attendance-drawer-field">
-                <label className="attendance-drawer-label">SELECT PROJECT SITE *</label>
+              <label className="att2-field">
+                <span className="att2-label">Project site</span>
                 <select
-                  className="form-select"
+                  className="form-select att2-select"
                   value={drawerSiteId}
                   onChange={(e) => setDrawerSiteId(e.target.value)}
-                  style={{ fontWeight: 600, height: 42 }}
                 >
-                  <option value="">-- Select Project Site --</option>
+                  <option value="">Select project site…</option>
                   {activeSites.data?.map((s) => (
                     <option key={s._id} value={s._id}>
                       {s.name} ({s.code})
                     </option>
                   ))}
                 </select>
-              </div>
+              </label>
             ) : (
-              <div className="attendance-drawer-field">
-                <label className="attendance-drawer-label">PROJECT SITE</label>
-                <div className="attendance-drawer-read-badge">
-                  <Building2 size={15} /> {selectedSite?.name || 'Assigned Site'}
-                </div>
+              <div className="att2-field">
+                <span className="att2-label">Project site</span>
+                <div className="att2-chip"><Building2 size={16} /> {selectedSite?.name || 'Assigned Site'}</div>
               </div>
             )}
-
-            {/* Attendance Date (UI ONLY) */}
-            <div className="attendance-drawer-field">
-              <label className="attendance-drawer-label">Attendance Date</label>
-              <div className="attendance-drawer-read-badge">
-                <Calendar size={15} /> {formatDate(targetDate)}
-              </div>
+            <div className="att2-field">
+              <span className="att2-label">Date</span>
+              <div className="att2-chip"><Calendar size={16} /> {formatDate(targetDate)}</div>
             </div>
-
-            {/* Import Previous Day Button */}
-            <div className="attendance-drawer-action">
-              <Button variant="secondary" onClick={handleCopyPreviousDay} isLoading={prevDayQuery.isFetching} className="attendance-drawer-btn">
-                <Copy size={15} /> Import Previous Day
-              </Button>
-            </div>
+            <Button variant="secondary" onClick={handleCopyPreviousDay} isLoading={prevDayQuery.isFetching} className="att2-import">
+              <Copy size={15} /> Copy yesterday
+            </Button>
           </div>
 
-          {/* Prompt if Super Admin hasn't selected a site in popup */}
           {isSuperAdmin && !drawerSiteId ? (
-            <div style={{ padding: '40px', textAlign: 'center', border: '1px dashed var(--color-primary-300)', borderRadius: 'var(--radius-md)', background: 'var(--color-primary-50)' }}>
-              <Building2 size={32} style={{ color: 'var(--color-primary-600)', marginBottom: 8 }} />
-              <h4 style={{ margin: 0, fontWeight: 700, color: 'var(--color-primary-900)' }}>Select a Project Site</h4>
-              <p style={{ margin: '4px 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-primary-700)' }}>
-                Please select a project site from the dropdown above to load workers and record daily attendance.
-              </p>
+            <div className="att2-empty">
+              <Building2 size={32} />
+              <strong>Select a project site</strong>
+              <span>Pick a site above to load its worker leaders.</span>
+            </div>
+          ) : drawerAttendanceQuery.isLoading || drawerAttendanceQuery.isFetching ? (
+            <div className="att2-list" aria-busy="true">
+              {[0, 1, 2, 3, 4].map((i) => <div key={i} className="att2-row att2-row--skeleton" />)}
+            </div>
+          ) : drawerAttendanceQuery.isError ? (
+            <div className="att2-empty att2-empty--error">
+              <AlertCircle size={32} />
+              <strong>Unable to load site workers</strong>
+              <span>{drawerAttendanceQuery.error?.response?.data?.message || drawerAttendanceQuery.error?.message || 'Error occurred while fetching workers.'}</span>
+              <Button variant="secondary" size="sm" onClick={() => drawerAttendanceQuery.refetch()}>Retry</Button>
             </div>
           ) : (
             <>
-              {/* Select Worker Leader to Add Dropdown */}
+              {/* Quick tools */}
+              <div className="att2-tools">
+                <div className="att2-search">
+                  <Search size={16} />
+                  <input
+                    type="search"
+                    placeholder="Find a leader…"
+                    value={drawerSearch}
+                    onChange={(e) => setDrawerSearch(e.target.value)}
+                  />
+                </div>
+                <div className="att2-bulk">
+                  <button type="button" className="att2-bulk-btn att2-bulk-btn--ok" onClick={() => handleMarkAll(true)}>
+                    <UserCheck size={15} /> All present
+                  </button>
+                  <button type="button" className="att2-bulk-btn" onClick={() => handleMarkAll(false)}>
+                    <UserX size={15} /> All absent
+                  </button>
+                </div>
+              </div>
+
               {drawerUnaddedLeaders.length > 0 && (
-                <div className="attendance-add-leader-box">
-                  <label className="attendance-add-leader-label">
-                    ADD WORKER LEADER TO TODAY'S ATTENDANCE
-                  </label>
+                <div className="att2-addbar">
+                  <Plus size={16} />
                   <select
-                    className="form-select attendance-add-leader-select"
+                    className="att2-addselect"
                     value={selectedLeaderToAdd}
                     onChange={(e) => handleAddLeaderToList(e.target.value)}
                   >
-                    <option value="">+ Select a Worker Leader from site list...</option>
+                    <option value="">Add a leader not in today's list ({drawerUnaddedLeaders.length})…</option>
                     {drawerUnaddedLeaders.map((l) => (
                       <option key={l.worker} value={l.worker}>
-                        {l.name} ({l.profession?.name || 'Trade'}) (@ ₹{l.dailyWage}/day)
+                        {l.name} · {l.profession?.name || 'Trade'} · ₹{l.dailyWage}/day
                       </option>
                     ))}
                   </select>
                 </div>
               )}
 
-              {/* Active Worker Leaders Attendance List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
-                <div className="attendance-summary-header">
-                  <div className="attendance-summary-title">
-                    ATTENDANCE LIST FOR {formatDate(targetDate).toUpperCase()} ({drawerActiveRows.length} LEADER{drawerActiveRows.length !== 1 ? 'S' : ''})
-                  </div>
-                  <div className="attendance-summary-stats">
-                    <span>Total Labours: <strong>{drawerTotals.totalWorkers}</strong></span>
-                    <span className="attendance-summary-divider">•</span>
-                    <span>Expense: <strong>{formatCurrency(drawerTotals.totalLabourExpense)}</strong></span>
-                  </div>
+              {drawerActiveRows.length === 0 ? (
+                <div className="att2-empty">
+                  <Inbox size={32} />
+                  <strong>No worker leaders for this site</strong>
+                  <span>New active workers added to this site will appear here automatically.</span>
                 </div>
-
-                {drawerAttendanceQuery.isLoading || drawerAttendanceQuery.isFetching ? (
-                  <div style={{ padding: '32px', textAlign: 'center' }}>
-                    <p style={{ margin: 0, color: 'var(--color-text-secondary)' }}>Loading site workers...</p>
-                  </div>
-                ) : drawerAttendanceQuery.isError ? (
-                  <div className="sites-page__state sites-page__state--empty" style={{ padding: '32px' }}>
-                    <AlertCircle size={32} style={{ color: 'var(--color-danger-500, #ef4444)' }} />
-                    <p style={{ margin: '8px 0 0', color: 'var(--color-danger-700, #b91c1c)', fontWeight: 600 }}>
-                      Unable to load site workers
-                    </p>
-                    <p style={{ margin: '4px 0 12px', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)' }}>
-                      {drawerAttendanceQuery.error?.response?.data?.message || drawerAttendanceQuery.error?.message || 'Error occurred while fetching workers.'}
-                    </p>
-                    <Button variant="secondary" size="sm" onClick={() => drawerAttendanceQuery.refetch()}>
-                      Retry
-                    </Button>
-                  </div>
-                ) : drawerActiveRows.length === 0 ? (
-                  <div className="sites-page__state sites-page__state--empty" style={{ padding: '32px' }}>
-                    <Inbox size={32} />
-                    <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontWeight: 500 }}>
-                      No Worker Leaders registered for this site on {formatDate(targetDate)}.
-                    </p>
-                    <p style={{ margin: '4px 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-tertiary)' }}>
-                      New active workers added to this site will automatically appear here.
-                    </p>
-                  </div>
-                ) : (
-                  drawerActiveRows.map((row) => {
+              ) : visibleDrawerRows.length === 0 ? (
+                <div className="att2-empty"><Search size={28} /><strong>No leader matches “{drawerSearch}”</strong></div>
+              ) : (
+                <div className="att2-list">
+                  {visibleDrawerRows.map((row) => {
                     const cnt = row.isPresent ? Math.max(0, Number(row.workerCount) || 0) : 0;
                     const wage = Math.max(0, Number(row.dailyWage) || 0);
-                    const totalCost = cnt * wage;
-
+                    const noteOpen = openNotes.has(row.worker) || !!row.remarks;
                     return (
-                      <div
-                        key={row.worker}
-                        className={`attendance-worker-card ${row.isPresent ? 'card-present' : 'card-absent'}`}
-                      >
-                        {/* Top row: Leader info + Present/Absent toggle + Remove button */}
-                        <div className="attendance-worker-card__header">
-                          <div className="attendance-worker-info">
-                            {row.photo?.url ? (
-                              <img
-                                src={row.photo.url}
-                                alt={row.name}
-                                className="attendance-worker-avatar"
-                              />
-                            ) : (
-                              <div className="attendance-worker-avatar-initial">
-                                {row.name[0]?.toLowerCase()}
-                              </div>
-                            )}
-                            <div>
-                              <div className="attendance-worker-name">{row.name}</div>
-                              <div className="attendance-worker-role">{row.profession?.name || 'General Helper'}</div>
-                            </div>
-                          </div>
-
-                          <div className="attendance-worker-actions">
-                            <button
-                              type="button"
-                              onClick={() => handleTogglePresence(row.worker)}
-                              className={`attendance-presence-pill ${row.isPresent ? 'presence-pill--present' : 'presence-pill--absent'}`}
-                            >
-                              {row.isPresent ? <UserCheck size={14} /> : <UserX size={14} />}
-                              <span>{row.isPresent ? 'Present' : 'Absent'}</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveLeaderFromList(row.worker)}
-                              className="attendance-worker-delete-btn"
-                              title="Remove from today's list"
-                            >
-                              <Trash2 size={16} />
-                            </button>
+                      <div key={row.worker} className={`att2-row ${row.isPresent ? 'is-present' : 'is-absent'}`}>
+                        <div className="att2-person">
+                          {row.photo?.url ? (
+                            <img src={row.photo.url} alt={row.name} className="att2-avatar" />
+                          ) : (
+                            <div className="att2-avatar att2-avatar--initial">{row.name?.[0]?.toUpperCase()}</div>
+                          )}
+                          <div className="att2-person-text">
+                            <div className="att2-name">{row.name}</div>
+                            <div className="att2-meta">{row.profession?.name || 'General Helper'} · {formatCurrency(wage)}/day</div>
                           </div>
                         </div>
 
-                        {/* Inputs Grid: Labours working, wage, total cost */}
-                        <div className="attendance-worker-card__grid">
-                          <div className="attendance-grid-col">
-                            <label className="attendance-grid-label">LABOURS WORKING</label>
-                            <input
-                              type="number"
-                              min="0"
-                              disabled={!row.isPresent}
-                              value={row.isPresent ? row.workerCount : 0}
-                              onChange={(e) => handleCountChange(row.worker, e.target.value)}
-                              className="form-input attendance-count-input"
-                              style={{
-                                borderColor: row.isPresent ? 'var(--color-primary-500)' : undefined,
-                              }}
-                            />
-                          </div>
-
-                          <div className="attendance-grid-col">
-                            <label className="attendance-grid-label">DAILY WAGE RATE</label>
-                            <div className="attendance-grid-value">
-                              {formatCurrency(wage)} / worker
-                            </div>
-                          </div>
-
-                          <div className="attendance-grid-col attendance-grid-col--right">
-                            <label className="attendance-grid-label">LEADER DAILY TOTAL</label>
-                            <div className={`attendance-grid-total ${row.isPresent ? 'total-active' : 'total-disabled'}`}>
-                              {formatCurrency(totalCost)}
-                            </div>
-                          </div>
+                        <div className="att2-stepper" role="group" aria-label={`Labours for ${row.name}`}>
+                          <button type="button" onClick={() => handleStep(row.worker, cnt - 1)} disabled={cnt <= 0} aria-label="Decrease">
+                            <Minus size={18} />
+                          </button>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min="0"
+                            value={row.isPresent ? row.workerCount : 0}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => handleCountChange(row.worker, e.target.value)}
+                            aria-label="Number of labours"
+                          />
+                          <button type="button" onClick={() => handleStep(row.worker, cnt + 1)} aria-label="Increase">
+                            <Plus size={18} />
+                          </button>
                         </div>
 
-                        {/* Remarks input */}
-                        <div>
+                        <div className="att2-total">{formatCurrency(cnt * wage)}</div>
+
+                        <div className="att2-actions">
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePresence(row.worker)}
+                            className={`att2-toggle ${row.isPresent ? 'on' : 'off'}`}
+                            aria-pressed={row.isPresent}
+                          >
+                            {row.isPresent ? 'Present' : 'Absent'}
+                          </button>
+                          <button
+                            type="button"
+                            className={`att2-icon-btn ${noteOpen ? 'active' : ''}`}
+                            onClick={() => toggleNote(row.worker)}
+                            title="Add note"
+                            aria-label="Add note"
+                          >
+                            <StickyNote size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            className="att2-icon-btn att2-icon-btn--danger"
+                            onClick={() => handleRemoveLeaderFromList(row.worker)}
+                            title="Remove from today's list"
+                            aria-label="Remove from today's list"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+
+                        {noteOpen && (
                           <input
                             type="text"
-                            placeholder="Add remarks / note (optional)..."
+                            className="att2-note"
+                            placeholder="Note (optional)…"
                             value={row.remarks || ''}
                             onChange={(e) => handleRemarksChange(row.worker, e.target.value)}
-                            className="form-input attendance-remarks-input"
                           />
-                        </div>
+                        )}
                       </div>
                     );
-                  })
-                )}
-              </div>
+                  })}
+                </div>
+              )}
             </>
           )}
         </div>
