@@ -246,26 +246,36 @@ export default function Attendance() {
 
   // Calculated summary stats for Daily View
   const summaryTotals = useMemo(() => {
+    if (mainAttendanceQuery.data?.summary) {
+      return {
+        totalLeaders: mainAttendanceQuery.data.summary.totalLeaders ?? 0,
+        presentLeaders: mainAttendanceQuery.data.summary.presentLeaders ?? 0,
+        totalWorkers: mainAttendanceQuery.data.summary.totalWorkers ?? 0,
+        totalLabourExpense: mainAttendanceQuery.data.summary.totalLabourExpense ?? 0,
+        isRecorded: (mainAttendanceQuery.data.summary.markedCount ?? 0) > 0,
+      };
+    }
+
     const isRecorded = (mainAttendanceQuery.data?.leaders || []).some((l) => l.isMarked);
     let presentLeaders = 0;
     let totalWorkers = 0;
     let totalLabourExpense = 0;
 
-        (mainAttendanceQuery.data?.leaders || []).forEach((r) => {
-          if (r.isMarked && (r.status === 'present' || r.workerCount > 0)) {
-            presentLeaders += 1;
-            totalWorkers += r.workerCount;
-            totalLabourExpense += r.totalAmount;
-          }
-        });
+    (mainAttendanceQuery.data?.leaders || []).forEach((r) => {
+      if (r.isMarked && (r.status === 'present' || r.workerCount > 0)) {
+        presentLeaders += 1;
+        totalWorkers += r.workerCount;
+        totalLabourExpense += r.totalAmount;
+      }
+    });
 
-        return {
-          totalLeaders: mainAttendanceQuery.data?.leaders?.length || 0,
-          presentLeaders,
-          totalWorkers,
-          totalLabourExpense,
-          isRecorded,
-        };
+    return {
+      totalLeaders: mainAttendanceQuery.data?.leaders?.length || 0,
+      presentLeaders,
+      totalWorkers,
+      totalLabourExpense,
+      isRecorded,
+    };
   }, [mainAttendanceQuery.data]);
 
   const markedCount = useMemo(() => mainTableRows.filter((r) => r.isMarked).length, [mainTableRows]);

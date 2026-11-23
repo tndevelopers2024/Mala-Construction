@@ -655,91 +655,193 @@ async function getDailyAttendance(queryParams, actor) {
 
   const { dayStart, queryStart, queryEnd, isoDateStr } = parseDayBounds(date);
 
-  const sitesQuery = targetSiteId
-    ? { $or: [{ sites: targetSiteId }, { site: targetSiteId }] }
-    : {};
+  // Case 1: Specific site attendance query
+  if (targetSiteId) {
+    const sitesQuery = { $or: [{ sites: targetSiteId }, { site: targetSiteId }] };
+    const leaders = await Worker.find({
+      ...sitesQuery,
+      status: 'active',
+      isDeleted: false,
+    })
+      .populate('profession', 'name')
+      .populate('sites', 'name code')
+      .populate('site', 'name code')
+      .sort({ name: 1 });
 
-  const workerQuery = {
-    ...sitesQuery,
-    status: 'active',
-    isDeleted: false,
-  };
+    const attendanceQuery = {
+      site: targetSiteId,
+      date: { $gte: queryStart, $lte: queryEnd },
+      isDeleted: false,
+    };
 
-  const leaders = await Worker.find(workerQuery)
+    const existingRecords = await Attendance.find(attendanceQuery).populate('profession', 'name');
+
+    const attendanceMap = new Map();
+    existingRecords.forEach((rec) => {
+      if (rec.worker && rec.date) {
+        const recDateObj = new Date(rec.date);
+        const recLocal = `${recDateObj.getFullYear()}-${String(recDateObj.getMonth() + 1).padStart(2, '0')}-${String(recDateObj.getDate()).padStart(2, '0')}`;
+        const recUTC = recDateObj.toISOString().slice(0, 10);
+        if (recLocal === isoDateStr || recUTC === isoDateStr) {
+          attendanceMap.set(rec.worker.toString(), rec);
+        }
+      }
+    });
+
+    let totalWorkers = 0;
+    let totalLabourExpense = 0;
+    let presentLeaders = 0;
+    let markedCount = 0;
+
+    const leaderRows = leaders.map((leader) => {
+      const rec = attendanceMap.get(leader._id.toString());
+      const isMarked = !!rec;
+      if (isMarked) markedCount++;
+      const workerCount = isMarked ? (rec.workerCount ?? 0) : (leader.workerCount ?? 1);
+      const dailyWage = isMarked ? (rec.dailyWage ?? 0) : (leader.dailyWage ?? 0);
+      const status = isMarked ? (rec.status || (rec.workerCount > 0 ? 'present' : 'absent')) : 'not_marked';
+      const totalAmount = isMarked ? workerCount * dailyWage : 0;
+
+      if (isMarked && (status === 'present' || workerCount > 0)) {
+        presentLeaders++;
+        totalWorkers += workerCount;
+        totalLabourExpense += totalAmount;
+      }
+
+      const assignedSite = (leader.sites && leader.sites.find((s) => s._id?.toString() === targetSiteId?.toString())) || leader.site || (leader.sites && leader.sites[0]);
+      const siteObj = assignedSite
+        ? { _id: assignedSite._id, name: assignedSite.name, code: assignedSite.code }
+        : (leader.site ? { _id: leader.site._id, name: leader.site.name, code: leader.site.code } : null);
+
+      return {
+        _id: rec ? rec._id.toString() : `${targetSiteId}_${leader._id.toString()}`,
+        worker: leader._id,
+        workerId: leader.workerId,
+        name: leader.name,
+        photo: leader.photo,
+        profession: leader.profession,
+        site: siteObj,
+        defaultWorkerCount: leader.workerCount ?? 1,
+        workerCount,
+        dailyWage,
+        status,
+        totalAmount,
+        attendanceId: rec ? rec._id : null,
+        isMarked,
+        remarks: rec ? rec.remarks || '' : '',
+      };
+    });
+
+    return {
+      date: isoDateStr,
+      siteId: targetSiteId,
+      summary: {
+        totalLeaders: leaders.length,
+        presentLeaders,
+        totalWorkers,
+        totalLabourExpense,
+        markedCount,
+      },
+      leaders: leaderRows,
+    };
+  }
+
+  // Case 2: ALL SITES COMBINED (targetSiteId is null)
+  const activeSites = await Site.find({ status: 'active', isDeleted: false }).sort({ name: 1 });
+  const allActiveWorkers = await Worker.find({ status: 'active', isDeleted: false })
     .populate('profession', 'name')
     .populate('sites', 'name code')
     .populate('site', 'name code')
     .sort({ name: 1 });
 
-  const attendanceQuery = {
-    ...siteFilter,
+  const existingRecords = await Attendance.find({
     date: { $gte: queryStart, $lte: queryEnd },
     isDeleted: false,
-  };
+  })
+    .populate('site', 'name code')
+    .populate('profession', 'name');
 
-  const existingRecords = await Attendance.find(attendanceQuery);
+  const attendanceKeyMap = new Map();
+  let totalWorkers = 0;
+  let totalLabourExpense = 0;
+  const presentWorkerIds = new Set();
+  let markedCount = 0;
 
-  const attendanceMap = new Map();
   existingRecords.forEach((rec) => {
     if (rec.worker && rec.date) {
       const recDateObj = new Date(rec.date);
       const recLocal = `${recDateObj.getFullYear()}-${String(recDateObj.getMonth() + 1).padStart(2, '0')}-${String(recDateObj.getDate()).padStart(2, '0')}`;
       const recUTC = recDateObj.toISOString().slice(0, 10);
-
-      // Strictly include record only if its recorded calendar date matches isoDateStr
       if (recLocal === isoDateStr || recUTC === isoDateStr) {
-        attendanceMap.set(rec.worker.toString(), rec);
+        const sId = (rec.site?._id || rec.site)?.toString();
+        const wId = (rec.worker?._id || rec.worker)?.toString();
+        if (sId && wId) {
+          attendanceKeyMap.set(`${sId}_${wId}`, rec);
+          markedCount++;
+          const isPresent = rec.status === 'present' || (rec.workerCount || 0) > 0;
+          if (isPresent) {
+            totalWorkers += (rec.workerCount || 0);
+            totalLabourExpense += (rec.totalAmount || 0);
+            presentWorkerIds.add(wId);
+          }
+        }
       }
     }
   });
 
-  let totalWorkers = 0;
-  let totalLabourExpense = 0;
+  const leaderRows = [];
+  activeSites.forEach((site) => {
+    const siteIdStr = site._id.toString();
+    const siteLeaders = allActiveWorkers.filter((w) => {
+      const hasInSites = w.sites && w.sites.some((s) => (s._id || s).toString() === siteIdStr);
+      const hasInSite = w.site && (w.site._id || w.site).toString() === siteIdStr;
+      return hasInSites || hasInSite;
+    });
 
-  const leaderRows = leaders.map((leader) => {
-    const rec = attendanceMap.get(leader._id.toString());
-    const isMarked = !!rec;
-    const workerCount = isMarked ? (rec.workerCount ?? 0) : (leader.workerCount ?? 1);
-    const dailyWage = isMarked ? (rec.dailyWage ?? 0) : (leader.dailyWage ?? 0);
-    const status = isMarked ? (rec.status || (rec.workerCount > 0 ? 'present' : 'absent')) : 'not_marked';
-    const totalAmount = isMarked ? workerCount * dailyWage : 0;
+    siteLeaders.forEach((leader) => {
+      const key = `${siteIdStr}_${leader._id.toString()}`;
+      const rec = attendanceKeyMap.get(key);
+      const isMarked = !!rec;
+      const workerCount = isMarked ? (rec.workerCount ?? 0) : (leader.workerCount ?? 1);
+      const dailyWage = isMarked ? (rec.dailyWage ?? 0) : (leader.dailyWage ?? 0);
+      const status = isMarked ? (rec.status || (rec.workerCount > 0 ? 'present' : 'absent')) : 'not_marked';
+      const totalAmount = isMarked ? workerCount * dailyWage : 0;
 
-    if (isMarked) {
-      totalWorkers += workerCount;
-      totalLabourExpense += totalAmount;
-    }
+      leaderRows.push({
+        _id: rec ? rec._id.toString() : key,
+        worker: leader._id,
+        workerId: leader.workerId,
+        name: leader.name,
+        photo: leader.photo,
+        profession: rec?.profession || leader.profession,
+        site: { _id: site._id, name: site.name, code: site.code },
+        defaultWorkerCount: leader.workerCount ?? 1,
+        workerCount,
+        dailyWage,
+        status,
+        totalAmount,
+        attendanceId: rec ? rec._id : null,
+        isMarked,
+        remarks: rec ? rec.remarks || '' : '',
+      });
+    });
+  });
 
-    const assignedSite = (leader.sites && leader.sites.find((s) => s._id?.toString() === targetSiteId?.toString())) || leader.site || (leader.sites && leader.sites[0]);
-    const siteObj = assignedSite
-      ? { _id: assignedSite._id, name: assignedSite.name, code: assignedSite.code }
-      : (leader.site ? { _id: leader.site._id, name: leader.site.name, code: leader.site.code } : null);
-
-    return {
-      _id: leader._id,
-      workerId: leader.workerId,
-      name: leader.name,
-      photo: leader.photo,
-      profession: leader.profession,
-      site: siteObj,
-      defaultWorkerCount: leader.workerCount ?? 1,
-      workerCount,
-      dailyWage,
-      status,
-      totalAmount,
-      attendanceId: rec ? rec._id : null,
-      isMarked,
-      remarks: rec ? rec.remarks || '' : '',
-    };
+  leaderRows.sort((a, b) => {
+    const siteComp = (a.site?.name || '').localeCompare(b.site?.name || '');
+    if (siteComp !== 0) return siteComp;
+    return (a.name || '').localeCompare(b.name || '');
   });
 
   return {
     date: isoDateStr,
-    siteId: targetSiteId,
+    siteId: null,
     summary: {
-      totalLeaders: leaders.length,
+      totalLeaders: allActiveWorkers.length,
+      presentLeaders: presentWorkerIds.size,
       totalWorkers,
       totalLabourExpense,
-      markedCount: existingRecords.length,
+      markedCount,
     },
     leaders: leaderRows,
   };
