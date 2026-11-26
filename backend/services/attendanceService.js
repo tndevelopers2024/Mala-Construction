@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const attendanceRepo = require('../repositories/attendance.repository');
 const Attendance = require('../models/Attendance');
 const Profession = require('../models/Profession');
@@ -851,6 +852,9 @@ async function saveDailyAttendance(payload, actor) {
   const { site: siteId, date, records = [] } = payload;
   const targetSiteId = siteId || (actor.role === 'site_admin' ? actor.assignedSite : null);
   if (!targetSiteId) throw ApiError.badRequest('Project site is required');
+  if (!mongoose.Types.ObjectId.isValid(targetSiteId)) {
+    throw ApiError.badRequest('Invalid project site ID');
+  }
   if (!date) throw ApiError.badRequest('Date is required');
 
   assertSiteAccess(actor, targetSiteId);
@@ -860,10 +864,14 @@ async function saveDailyAttendance(payload, actor) {
   const savedRecords = [];
 
   for (const item of records) {
-    if (!item.worker) continue;
+    const rawWorkerId = item.worker?._id || item.worker;
+    if (!rawWorkerId) continue;
+    if (!mongoose.Types.ObjectId.isValid(rawWorkerId)) {
+      throw ApiError.badRequest(`Invalid worker ID: ${rawWorkerId}`);
+    }
 
     const workerDoc = await Worker.findOne({
-      _id: item.worker,
+      _id: rawWorkerId,
       $or: [{ sites: targetSiteId }, { site: targetSiteId }],
       isDeleted: false,
     });

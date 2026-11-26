@@ -181,7 +181,7 @@ export default function Attendance() {
           const count = l.workerCount ?? l.defaultWorkerCount ?? 1;
           const isPresent = l.isMarked ? (l.status === 'present' || (l.status !== 'absent' && count > 0)) : true;
           return {
-            worker: l._id,
+            worker: l.worker || l._id,
             name: l.name,
             profession: l.profession,
             site: l.site,
@@ -563,7 +563,15 @@ export default function Attendance() {
   const handleCountChange = (workerId, val) => {
     const countVal = val === '' ? '' : Math.max(0, Number(val));
     setDrawerRows((prev) =>
-      prev.map((r) => (r.worker === workerId ? { ...r, workerCount: countVal } : r))
+      prev.map((r) =>
+        r.worker === workerId
+          ? {
+              ...r,
+              workerCount: countVal,
+              isPresent: countVal === '' ? r.isPresent : countVal > 0,
+            }
+          : r
+      )
     );
     setIsDirty(true);
   };
