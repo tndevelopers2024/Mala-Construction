@@ -92,7 +92,10 @@ export default function Attendance() {
   const drawerTargetSiteId = isSuperAdmin ? (drawerSiteId || undefined) : siteId;
   const drawerAttendanceQuery = useDailyAttendance(
     { siteId: drawerTargetSiteId, date: targetDate },
-    { enabled: isSuperAdmin ? !!drawerSiteId : !!siteId }
+    {
+      enabled: isPanelOpen && (isSuperAdmin ? !!drawerSiteId : !!siteId),
+      placeholderData: undefined,
+    }
   );
 
   // Local state for drawer attendance rows
@@ -175,7 +178,22 @@ export default function Attendance() {
 
   // Populate drawer rows whenever drawer query loads or site changes
   useEffect(() => {
-    if (drawerAttendanceQuery.data?.leaders) {
+    if (!isPanelOpen || !drawerTargetSiteId) {
+      setDrawerRows([]);
+      setIsDirty(false);
+      return;
+    }
+
+    if (drawerAttendanceQuery.isLoading || drawerAttendanceQuery.isFetching) {
+      return;
+    }
+
+    const responseSiteId = drawerAttendanceQuery.data?.siteId;
+    if (
+      drawerAttendanceQuery.data?.leaders &&
+      responseSiteId &&
+      responseSiteId.toString() === drawerTargetSiteId.toString()
+    ) {
       setDrawerRows(
         drawerAttendanceQuery.data.leaders.map((l) => {
           const count = l.workerCount ?? l.defaultWorkerCount ?? 1;
@@ -198,10 +216,16 @@ export default function Attendance() {
         })
       );
       setIsDirty(false);
-    } else if (!drawerAttendanceQuery.isLoading && !drawerAttendanceQuery.isFetching) {
+    } else {
       setDrawerRows([]);
     }
-  }, [drawerAttendanceQuery.data, drawerAttendanceQuery.isLoading, drawerAttendanceQuery.isFetching, drawerTargetSiteId]);
+  }, [
+    isPanelOpen,
+    drawerTargetSiteId,
+    drawerAttendanceQuery.data,
+    drawerAttendanceQuery.isLoading,
+    drawerAttendanceQuery.isFetching,
+  ]);
 
   // Main table active rows derived from mainAttendanceQuery
   const mainTableRows = useMemo(() => {
